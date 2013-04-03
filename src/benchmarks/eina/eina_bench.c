@@ -36,6 +36,7 @@ struct _Eina_Benchmark_Case
 
 static const Eina_Benchmark_Case etc[] = {
    { "Hash", eina_bench_hash },
+   /* { "JSON", eina_bench_json }, */
    /* { "Array vs List vs Inlist", eina_bench_array }, */
    /* { "Stringshare", eina_bench_stringshare }, */
    /* { "Convert", eina_bench_convert }, */

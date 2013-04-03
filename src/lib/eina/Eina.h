@@ -203,7 +203,7 @@
  *
  * Eina tools aims to help application development, providing ways to
  * make it safer, log errors, manage memory more efficiently and more.
- * 
+ *
  */
 
 #ifdef _WIN32
@@ -263,6 +263,7 @@ extern "C" {
 #include "eina_xattr.h"
 #include "eina_value.h"
 #include "eina_cow.h"
+#include "eina_json.h"
 
 #ifdef __cplusplus
 }
