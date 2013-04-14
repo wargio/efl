@@ -607,6 +607,10 @@ START_TEST(evas_textblock_cursor)
    /* Make sure coords are correct for ligatures */
      {
         evas_object_textblock_text_markup_set(tb, "fi<br/>fii");
+        evas_object_textblock_size_native_get(tb, &nw, &nh);
+        printf("ligatures:\nNative: nw = %d, nh = %d\n", nw, nh);
+        evas_object_textblock_size_formatted_get(tb, &nw, &nh);
+        printf("ligatures:\nFormatted: nw = %d, nh = %d\n", nw, nh);
 
 #ifdef HAVE_HARFBUZZ
         for (i = 0 ; i < 2 ; i++)
@@ -1438,6 +1442,7 @@ START_TEST(evas_textblock_items)
    fail_if((w >= 330) || (h >= 152));
    evas_textblock_cursor_pos_set(cur, 11);
    evas_textblock_cursor_format_item_geometry_get(cur, NULL, NULL, &w, &ih);
+   printf("w == %d; h == %d; ih == %d\n", w, h, ih);
    fail_if((w > 108) || (h != ih));
 
    buf = "This is an <item relize=330x152 vsize=ascent></>.";
