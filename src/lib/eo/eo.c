@@ -910,6 +910,20 @@ _eo_class_mro_has(const _Eo_Class *klass, const _Eo_Class *find)
 }
 #endif
 
+EAPI Eina_List *
+eo_class_mro_get(const Eo_Class *class_id)
+{
+   EINA_SAFETY_ON_NULL_RETURN_VAL(class_id, NULL);
+   const _Eo_Class *klass = _eo_class_pointer_get(class_id);
+   const _Eo_Class **itr;
+   Eina_List *mro = NULL;
+   for (itr = klass->mro ; *itr ; itr++)
+     {
+        mro = eina_list_append(mro, _eo_class_id_get(*itr));
+     }
+   return mro;
+}
+
 static Eina_List *
 _eo_class_list_remove_duplicates(Eina_List* list)
 {
