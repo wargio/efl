@@ -382,7 +382,7 @@ _evas_gl_common_viewport_set(Evas_Engine_GL_Context *gc)
 {
    GLfloat proj[16];
    unsigned int i;
-   int w = 1, h = 1, m = 1, rot = 1, foc = 0;
+   int rx = 0, ry = 0, rw = 1, rh = 1, w = 1, h = 1, m = 1, rot = 1, foc = 0;
 
    EINA_SAFETY_ON_NULL_RETURN(gc);
    foc = gc->foc;
@@ -392,12 +392,18 @@ _evas_gl_common_viewport_set(Evas_Engine_GL_Context *gc)
      {
         w = gc->w;
         h = gc->h;
+        rw = w;
+        rh = h;
         rot = gc->rot;
      }
    else
      {
-        w = gc->pipe[0].shader.surface->w;
-        h = gc->pipe[0].shader.surface->h;
+        rx = gc->pipe[0].shader.surface->tex->x;
+        ry = gc->pipe[0].shader.surface->tex->y;
+        rw = gc->pipe[0].shader.surface->w;
+        rh = gc->pipe[0].shader.surface->h;
+        w = gc->pipe[0].shader.surface->tex->pt->w;
+        h = gc->pipe[0].shader.surface->tex->pt->h;
         rot = 0;
         m = -1;
      }
@@ -408,7 +414,8 @@ _evas_gl_common_viewport_set(Evas_Engine_GL_Context *gc)
      {
         if ((!gc->change.size) ||
             (
-                (gc->shared->w == w) && (gc->shared->h == h) &&
+                (gc->shared->x == rx) && (gc->shared->y == ry) &&
+                (gc->shared->w == rw) && (gc->shared->h == rh) &&
                 (gc->shared->rot == rot) && (gc->shared->foc == gc->foc) &&
                 (gc->shared->mflip == m)
             )
@@ -418,9 +425,11 @@ _evas_gl_common_viewport_set(Evas_Engine_GL_Context *gc)
 #ifdef GL_GLES
    gc->shared->eglctxt = gc->eglctxt;
 #endif
-   
-   gc->shared->w = w;
-   gc->shared->h = h;
+
+   gc->shared->x = rx;
+   gc->shared->y = ry;
+   gc->shared->w = rw;
+   gc->shared->h = rh;
    gc->shared->rot = rot;
    gc->shared->mflip = m;
    gc->shared->foc = foc;
@@ -643,13 +652,14 @@ evas_gl_common_context_new(void)
 
         // magic numbers that are a result of imperical testing and getting
         // "best case" performance across a range of systems
-        shared->info.tune.cutout.max                 = DEF_CUTOUT;
-        shared->info.tune.pipes.max                  = DEF_PIPES;
-        shared->info.tune.atlas.max_alloc_size       = DEF_ATLAS_ALLOC;
-        shared->info.tune.atlas.max_alloc_alpha_size = DEF_ATLAS_ALLOC_ALPHA;
-        shared->info.tune.atlas.max_w                = DEF_ATLAS_W;
-        shared->info.tune.atlas.max_h                = DEF_ATLAS_H;
-        shared->info.tune.atlas.slot_size            = DEF_ATLAS_SLOT;
+        shared->info.tune.cutout.max                  = DEF_CUTOUT;
+        shared->info.tune.pipes.max                   = DEF_PIPES;
+        shared->info.tune.atlas.max_alloc_size        = DEF_ATLAS_ALLOC;
+        shared->info.tune.atlas.max_alloc_alpha_size  = DEF_ATLAS_ALLOC_ALPHA;
+        shared->info.tune.atlas.max_alloc_render_size = DEF_ATLAS_ALLOC_RENDER;
+        shared->info.tune.atlas.max_w                 = DEF_ATLAS_W;
+        shared->info.tune.atlas.max_h                 = DEF_ATLAS_H;
+        shared->info.tune.atlas.slot_size             = DEF_ATLAS_SLOT;
 
         // per gpu hacks. based on impirical measurement of some known gpu's
         s = (const char *)glGetString(GL_RENDERER);
@@ -684,6 +694,7 @@ evas_gl_common_context_new(void)
         GETENVOPT("EVAS_GL_PIPES_MAX", pipes.max, 1, MAX_PIPES);
         GETENVOPT("EVAS_GL_ATLAS_ALLOC_SIZE", atlas.max_alloc_size, MIN_ATLAS_ALLOC, MAX_ATLAS_ALLOC);
         GETENVOPT("EVAS_GL_ATLAS_ALLOC_ALPHA_SIZE", atlas.max_alloc_alpha_size, MIN_ATLAS_ALLOC_ALPHA, MAX_ATLAS_ALLOC_ALPHA);
+        GETENVOPT("EVAS_GL_ATLAS_ALLOC_RENDER_SIZE", atlas.max_alloc_render_size, MIN_ATLAS_ALLOC_RENDER, MAX_ATLAS_ALLOC_RENDER);
         GETENVOPT("EVAS_GL_ATLAS_MAX_W", atlas.max_w, 0, MAX_ATLAS_W);
         GETENVOPT("EVAS_GL_ATLAS_MAX_H", atlas.max_h, 0, MAX_ATLAS_H);
         GETENVOPT("EVAS_GL_ATLAS_SLOT_SIZE", atlas.slot_size, MIN_ATLAS_SLOT, MAX_ATLAS_SLOT);
@@ -1046,6 +1057,8 @@ evas_gl_common_context_target_surface_set(Evas_Engine_GL_Context *gc,
    gc->state.current.cy = -1;
    gc->state.current.cw = -1;
    gc->state.current.ch = -1;
+   gc->state.current.offset.x = 0;
+   gc->state.current.offset.y = 0;     
 
    gc->pipe[0].shader.surface = surface;
    gc->change.size = 1;
@@ -1067,14 +1080,16 @@ evas_gl_common_context_target_surface_set(Evas_Engine_GL_Context *gc,
      {
         glsym_glBindFramebuffer(GL_FRAMEBUFFER, surface->tex->pt->fb);
         GLERR(__FUNCTION__, __FILE__, __LINE__, "");
+        gc->state.current.offset.x = surface->tex->x;
+        gc->state.current.offset.y = surface->tex->y;
      }
    _evas_gl_common_viewport_set(gc);
 }
 
-#define PUSH_VERTEX(n, x, y, z) \
-   gc->pipe[n].array.vertex[nv++] = x; \
-   gc->pipe[n].array.vertex[nv++] = y; \
-   gc->pipe[n].array.vertex[nv++] = z
+#define PUSH_VERTEX(N, X, Y, Z)                                     \
+   gc->pipe[N].array.vertex[nv++] = gc->state.current.offset.x + X; \
+   gc->pipe[N].array.vertex[nv++] = gc->state.current.offset.y + Y; \
+   gc->pipe[N].array.vertex[nv++] = Z
 #define PUSH_COLOR(n, r, g, b, a) \
    gc->pipe[n].array.color[nc++] = r; \
    gc->pipe[n].array.color[nc++] = g; \
@@ -1349,8 +1364,8 @@ evas_gl_common_context_line_push(Evas_Engine_GL_Context *gc,
    gc->pipe[pn].shader.blend = blend;
    gc->pipe[pn].shader.render_op = gc->dc->render_op;
    gc->pipe[pn].shader.clip = clip;
-   gc->pipe[pn].shader.cx = cx;
-   gc->pipe[pn].shader.cy = cy;
+   gc->pipe[pn].shader.cx = cx + gc->state.current.offset.x;
+   gc->pipe[pn].shader.cy = cy + gc->state.current.offset.y;
    gc->pipe[pn].shader.cw = cw;
    gc->pipe[pn].shader.ch = ch;
 
@@ -1755,7 +1770,7 @@ evas_gl_common_context_image_push(Evas_Engine_GL_Context *gc,
         PUSH_TEXSAM(pn, samx, samy);
         PUSH_TEXSAM(pn, samx, samy);
      }
-   
+
    // if nomul... dont need this
    for (i = 0; i < 6; i++)
      {
@@ -2432,6 +2447,9 @@ evas_gl_common_context_image_map_push(Evas_Engine_GL_Context *gc,
         _evas_gl_common_viewport_set(gc);
      }
 
+   cx += gc->state.current.offset.x;
+   cy += gc->state.current.offset.y;
+
    pn = _evas_gl_common_context_push(RTYPE_MAP,
                                      gc, tex, NULL,
                                      prog,
@@ -2503,8 +2521,8 @@ evas_gl_common_context_image_map_push(Evas_Engine_GL_Context *gc,
         else
           {
              PUSH_VERTEX(pn,
-                         (p[points[i]].fx) + gc->shared->ax,
-                         (p[points[i]].fy) + gc->shared->ay,
+                         (int) ((p[points[i]].fx) + gc->shared->ax),
+                         (int) ((p[points[i]].fy) + gc->shared->ay),
                          (p[points[i]].fz)
                          + (gc->shared->foc - gc->shared->z0));
           }
@@ -2586,8 +2604,8 @@ shader_array_flush(Evas_Engine_GL_Context *gc)
    if (!((gc->pipe[0].shader.surface == gc->def_surface) ||
          (!gc->pipe[0].shader.surface)))
      {
-        gw = gc->pipe[0].shader.surface->w;
-        gh = gc->pipe[0].shader.surface->h;
+        gw = gc->pipe[0].shader.surface->tex->pt->w;
+        gh = gc->pipe[0].shader.surface->tex->pt->h;
         fbo = 1;
      }
    for (i = 0; i < gc->shared->info.tune.pipes.max; i++)
@@ -2727,17 +2745,36 @@ shader_array_flush(Evas_Engine_GL_Context *gc)
         if (gc->pipe[i].shader.clip != gc->state.current.clip)
           {
              int cx, cy, cw, ch;
-             
+
              cx = gc->pipe[i].shader.cx;
              cy = gc->pipe[i].shader.cy;
              cw = gc->pipe[i].shader.cw;
              ch = gc->pipe[i].shader.ch;
-             if ((gc->master_clip.enabled) && (!fbo))
+             if (fbo)
                {
                   if (gc->pipe[i].shader.clip)
                     {
                        RECTS_CLIP_TO_RECT(cx, cy, cw, ch,
-                                          gc->master_clip.x, gc->master_clip.y,
+                                          gc->pipe[0].shader.surface->tex->x,
+                                          gc->pipe[0].shader.surface->tex->y,
+                                          gc->pipe[0].shader.surface->tex->w,
+                                          gc->pipe[0].shader.surface->tex->h);
+                    }
+                  else
+                    {
+                       cx = gc->pipe[0].shader.surface->tex->x;
+                       cy = gc->pipe[0].shader.surface->tex->y;
+                       cw = gc->pipe[0].shader.surface->tex->w;
+                       ch = gc->pipe[0].shader.surface->tex->h;
+                    }
+               }
+             else if ((gc->master_clip.enabled) && (!fbo))
+               {
+                  if (gc->pipe[i].shader.clip)
+                    {
+                       RECTS_CLIP_TO_RECT(cx, cy, cw, ch,
+                                          gc->master_clip.x,
+					  gc->master_clip.y,
                                           gc->master_clip.w, gc->master_clip.h);
                     }
                   else
@@ -2748,8 +2785,8 @@ shader_array_flush(Evas_Engine_GL_Context *gc)
                        ch = gc->master_clip.h;
                     }
                }
-             if ((gc->pipe[i].shader.clip) || 
-                 ((gc->master_clip.enabled) && (!fbo)))
+             if (gc->pipe[i].shader.clip || 
+                 gc->master_clip.enabled)
                {
                   glEnable(GL_SCISSOR_TEST);
                   if (!fbo)
@@ -2773,7 +2810,10 @@ shader_array_flush(Evas_Engine_GL_Context *gc)
                }
           }
         if (((gc->pipe[i].shader.clip) && (!setclip)) ||
-            ((gc->master_clip.enabled) && (!fbo)))
+            ((gc->master_clip.enabled) && (!fbo)) ||
+            (fbo && gc->pipe[0].shader.surface &&
+             (gc->pipe[0].shader.surface->tex->x ||
+              gc->pipe[0].shader.surface->tex->y)))
           {
              int cx, cy, cw, ch;
              
@@ -2781,12 +2821,32 @@ shader_array_flush(Evas_Engine_GL_Context *gc)
              cy = gc->pipe[i].shader.cy;
              cw = gc->pipe[i].shader.cw;
              ch = gc->pipe[i].shader.ch;
-             if ((gc->master_clip.enabled) && (!fbo))
+             if (fbo)
                {
                   if (gc->pipe[i].shader.clip)
                     {
                        RECTS_CLIP_TO_RECT(cx, cy, cw, ch,
-                                          gc->master_clip.x, gc->master_clip.y,
+                                          gc->pipe[0].shader.surface->tex->x,
+                                          gc->pipe[0].shader.surface->tex->y,
+                                          gc->pipe[0].shader.surface->tex->w,
+                                          gc->pipe[0].shader.surface->tex->h);
+                    }
+                  else
+                    {
+                       cx = gc->pipe[0].shader.surface->tex->x;
+                       cy = gc->pipe[0].shader.surface->tex->y;
+                       cw = gc->pipe[0].shader.surface->tex->w;
+                       ch = gc->pipe[0].shader.surface->tex->h;
+                    }
+                          
+               }
+             else if ((gc->master_clip.enabled) && (!fbo))
+               {
+                  if (gc->pipe[i].shader.clip)
+                    {
+                       RECTS_CLIP_TO_RECT(cx, cy, cw, ch,
+                                          gc->master_clip.x,
+					  gc->master_clip.y,
                                           gc->master_clip.w, gc->master_clip.h);
                     }
                   else
@@ -2802,6 +2862,7 @@ shader_array_flush(Evas_Engine_GL_Context *gc)
                  (cw != gc->state.current.cw) ||
                  (ch != gc->state.current.ch))
                {
+                  glEnable(GL_SCISSOR_TEST);
                   if (!fbo)
                     scissor_rot(gc, gc->rot, gw, gh, cx, gh - cy - ch, cw, ch);
                   else

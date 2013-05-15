@@ -248,7 +248,7 @@ struct _Evas_GL_Shared
       Eina_Bool unpack_row_length : 1;
       // tuning params - per gpu/cpu combo?
 #define MAX_CUTOUT             512
-#define DEF_CUTOUT                  512
+#define DEF_CUTOUT             512
 
 #define MAX_PIPES              128
 #define DEF_PIPES                    32
@@ -257,22 +257,26 @@ struct _Evas_GL_Shared
 #define DEF_PIPES_TEGRA_3            24
 
 #define MIN_ATLAS_ALLOC         16
-#define MAX_ATLAS_ALLOC       1024
-#define DEF_ATLAS_ALLOC            1024
+#define MAX_ATLAS_ALLOC         1024
+#define DEF_ATLAS_ALLOC         1024
 
 #define MIN_ATLAS_ALLOC_ALPHA   16
-#define MAX_ATLAS_ALLOC_ALPHA 4096
-#define DEF_ATLAS_ALLOC_ALPHA      4096
+#define MAX_ATLAS_ALLOC_ALPHA   4096
+#define DEF_ATLAS_ALLOC_ALPHA   4096
+
+#define MIN_ATLAS_ALLOC_RENDER   16
+#define MAX_ATLAS_ALLOC_RENDER   2048
+#define DEF_ATLAS_ALLOC_RENDER   1024
 
 #define MAX_ATLAS_W            512
-#define DEF_ATLAS_W                 512
+#define DEF_ATLAS_W            512
 
 #define MAX_ATLAS_H            512
-#define DEF_ATLAS_H                 512
+#define DEF_ATLAS_H            512
 
 #define MIN_ATLAS_SLOT          16
 #define MAX_ATLAS_SLOT         512
-#define DEF_ATLAS_SLOT               16
+#define DEF_ATLAS_SLOT          16
 
       struct {
          struct {
@@ -284,6 +288,7 @@ struct _Evas_GL_Shared
          struct {
             int max_alloc_size;
             int max_alloc_alpha_size;
+            int max_alloc_render_size;
             int max_w;
             int max_h;
             int slot_size;
@@ -296,6 +301,11 @@ struct _Evas_GL_Shared
       Eina_List       *atlas[33][3];
    } tex;
 
+   struct {
+      Eina_List       *whole;
+      Eina_List       *atlas[2];
+   } fbo;
+
    Eina_Hash          *native_pm_hash;
    Eina_Hash          *native_tex_hash;
 
@@ -307,7 +317,7 @@ struct _Evas_GL_Shared
    Evas_GL_Program     shader[SHADER_LAST];
 
    int references;
-   int w, h;
+   int x, y, w, h;
    int rot;
    int mflip;
    // persp map
@@ -329,7 +339,7 @@ struct _Evas_GL_Shared
 struct _Evas_Engine_GL_Context
 {
    int                references;
-   int                w, h;
+   int                x, y, w, h;
    int                rot;
    int                foc, z0, px, py;
    RGBA_Draw_Context *dc;
@@ -348,6 +358,9 @@ struct _Evas_Engine_GL_Context
          int             smooth;
          int             blend;
          int             clip;
+         struct {
+            int          x, y;
+         } offset;
       } current;
    } state;
    
@@ -436,6 +449,8 @@ struct _Evas_GL_Texture_Pool
       int           checked_out;
    } dyn;
    Eina_List       *allocations;
+   Eina_Rectangle_Pool *pool;
+
    Eina_Bool        whole : 1;
    Eina_Bool        render : 1;
    Eina_Bool        native : 1;
@@ -448,6 +463,9 @@ struct _Evas_GL_Texture
    Evas_GL_Image   *im;
    Evas_GL_Texture_Pool *pt, *ptu, *ptv, *ptuv;
    RGBA_Font_Glyph *fglyph;
+
+   Eina_Rectangle  *coord;
+
    int              x, y, w, h;
    double           sx1, sy1, sx2, sy2;
    int              references;
@@ -702,7 +720,7 @@ extern unsigned int   (*secsym_eglUnmapImageSEC)             (void *a, void *b, 
 extern unsigned int   (*secsym_eglGetImageAttribSEC)         (void *a, void *b, int c, int *d);
 #endif
 
-//#define GL_ERRORS 1
+#define GL_ERRORS 1
 
 #ifdef GL_ERRORS
 # define GLERR(fn, fl, ln, op) \
