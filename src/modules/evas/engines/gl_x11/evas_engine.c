@@ -2909,6 +2909,16 @@ eng_image_map_surface_new(void *data, int w, int h, int alpha)
 {
    Render_Engine *re;
 
+#define ROUND_TO_TILE(Value)                                            \
+   Value = ((Value % EVAS_GL_UPDATE_TILE_SIZE) == 0) ?                  \
+     (Value / EVAS_GL_UPDATE_TILE_SIZE) * EVAS_GL_UPDATE_TILE_SIZE :    \
+     ((Value / EVAS_GL_UPDATE_TILE_SIZE) + 1) * EVAS_GL_UPDATE_TILE_SIZE;
+
+   ROUND_TO_TILE(w);
+   ROUND_TO_TILE(h);
+
+#undef ROUND_TO_TILE
+
    re = (Render_Engine *)data;
    return evas_gl_common_image_surface_new(re->win->gl_context, w, h, alpha);
 }
