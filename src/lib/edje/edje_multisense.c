@@ -10,7 +10,7 @@ static Eina_Bool outfail = EINA_FALSE;
 
 static Eina_Bool _play_finished(void *data EINA_UNUSED, Eo *in, const Eo_Event_Description *desc EINA_UNUSED, void *event_info EINA_UNUSED)
 {
-  eo_del(in);
+   eo_del(in);
 
    return EINA_TRUE;
 }
@@ -85,7 +85,7 @@ static void _free(void *data)
    struct _edje_multisense_eet_data *eet_data = data;
 
    if (eet_data->ef) eet_close(eet_data->ef);
-// don't free if eet_data->data  comes from eet_read_direct   
+// don't free if eet_data->data  comes from eet_read_direct
 //  free(eet_data->data);
    free(data);
    outs--;
@@ -103,7 +103,7 @@ _edje_multisense_internal_sound_sample_play(Edje *ed, const char *sample_name, c
    Eina_Bool ret;
 
    if (outfail) return EINA_FALSE;
-   
+
    if (!sample_name)
      {
         ERR("Given Sample Name is NULL\n");
@@ -122,7 +122,7 @@ _edje_multisense_internal_sound_sample_play(Edje *ed, const char *sample_name, c
             int len;
 
             snprintf(snd_id_str, sizeof(snd_id_str), "edje/sounds/%i", sample->id);
-            
+
             eet_data = calloc(1, sizeof(struct _edje_multisense_eet_data));
             if (!eet_data)
               {
@@ -194,6 +194,73 @@ _edje_multisense_internal_sound_sample_play(Edje *ed, const char *sample_name, c
 }
 
 Eina_Bool
+_edje_multisense_internal_sound_sample_play_ex(void *data, const char *id, size_t size, const double speed, void *play_fn (void), void *finish (void))
+{  /* Data is the sample data as was previouly taken from EDJ file */
+#ifdef ENABLE_MULTISENSE
+   Eo *in;
+   Eina_Bool ret;
+   if (outfail) return EINA_FALSE;
+
+   if (!data)
+     return EINA_FALSE;
+
+   struct _edje_multisense_eet_data *eet_data;
+
+   eet_data = calloc(1, sizeof(struct _edje_multisense_eet_data));
+   if (!eet_data)
+     {
+        ERR("Out of memory in allocating multisense sample info");
+        return EINA_FALSE;
+     }
+
+   eet_data->data = data;
+   eet_data->length = size;
+   /* action->speed */
+
+   eet_data->vio.get_length = eet_snd_file_get_length;
+   eet_data->vio.seek = eet_snd_file_seek;
+   eet_data->vio.read = eet_snd_file_read;
+   eet_data->vio.tell = eet_snd_file_tell;
+   eet_data->offset = 0;
+
+   in = eo_add(ECORE_AUDIO_OBJ_IN_SNDFILE_CLASS, NULL,
+         ecore_audio_obj_name_set(id),
+         ecore_audio_obj_in_speed_set(speed),
+         ecore_audio_obj_vio_set(&eet_data->vio, eet_data, _free),
+         eo_event_callback_add(ECORE_AUDIO_EV_IN_STOPPED, play_fn, finish));
+   if (!out)
+     {
+        out = eo_add(ECORE_AUDIO_OBJ_OUT_PULSE_CLASS, NULL,
+              eo_event_callback_add(ECORE_AUDIO_EV_OUT_PULSE_CONTEXT_FAIL, _out_fail, NULL));
+        if (out) outs++;
+     }
+   if (!out)
+     {
+        ERR("Could not create multisense audio out (pulse)");
+        eo_del(in);
+        return EINA_FALSE;
+     }
+   eo_do(out, ecore_audio_obj_out_input_attach(in, &ret));
+   if (!ret)
+     {
+        ERR("Could not attach input");
+        eo_del(in);
+        return EINA_FALSE;
+     }
+   return EINA_TRUE;
+#else
+   // warning shh
+   (void) data;
+   (void) id;
+   (void) size;
+   (void) speed;
+   (void) play_fn;
+   (void) finish;
+   return EINA_FALSE;
+#endif
+}
+
+Eina_Bool
 _edje_multisense_internal_sound_tone_play(Edje *ed, const char *tone_name, const double duration)
 {
 #ifdef ENABLE_MULTISENSE
@@ -207,9 +274,9 @@ _edje_multisense_internal_sound_tone_play(Edje *ed, const char *tone_name, const
         ERR("Given Tone Name is NULL");
         return EINA_FALSE;
      }
-   
+
    if (outfail) return EINA_FALSE;
-   
+
    if ((!ed) || (!ed->file) || (!ed->file->sound_dir))
      return EINA_FALSE;
 
