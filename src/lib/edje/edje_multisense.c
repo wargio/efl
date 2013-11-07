@@ -194,7 +194,7 @@ _edje_multisense_internal_sound_sample_play(Edje *ed, const char *sample_name, c
 }
 
 Eina_Bool
-_edje_multisense_internal_sound_sample_play_ex(void *data, const char *id, size_t size, const double speed, void *play_fn (void), void *finish (void))
+_edje_multisense_internal_sound_sample_play_ex(void *data, const char *id, size_t size, const double speed, Eo_Event_Cb play_fn, void *finish (void))
 {  /* Data is the sample data as was previouly taken from EDJ file */
 #ifdef ENABLE_MULTISENSE
    Eo *in;

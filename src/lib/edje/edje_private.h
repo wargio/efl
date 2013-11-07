@@ -2413,7 +2413,7 @@ void _edje_subobj_unregister(Edje *ed, Evas_Object *ob);
 void _edje_multisense_init(void);
 void _edje_multisense_shutdown(void);
 Eina_Bool _edje_multisense_internal_sound_sample_play(Edje *ed, const char *sample_name, const double speed);
-Eina_Bool _edje_multisense_internal_sound_sample_play_ex(void *data, const char *id, size_t size, const double speed, void *play_fn (void), void *finish (void));
+Eina_Bool _edje_multisense_internal_sound_sample_play_ex(void *data, const char *id, size_t size, const double speed, Eo_Event_Cb play_fn, void *finish (void));
 Eina_Bool _edje_multisense_internal_sound_tone_play(Edje *ed, const char *tone_name, const double duration);
 
 void _edje_part_recalc(Edje *ed, Edje_Real_Part *ep, int flags, Edje_Calc_Params *state);
