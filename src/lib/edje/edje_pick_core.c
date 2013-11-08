@@ -30,8 +30,6 @@ composed of all theme1.edj components.\n\
 Replacing the button and check with widgets taken from default theme.\n\
 (Given that theme1.edj button, check group-name are as in default.edj)\n"
 
-#define VERBOSE(COMMAND) if (context->v) { COMMAND; }
-
 struct _Edje_Pick_Id
 {
    int old_id;
@@ -102,6 +100,8 @@ edje_pick_init(void)
         ecore_init();
         _edje_edd_init();
      }
+
+#define VERBOSE(COMMAND) if (context->v) { COMMAND; }
 
    init_count++;
 }
@@ -567,7 +567,7 @@ _edje_pick_external_dir_update(Edje_File *o, Edje_File *edf)
         total += edf->external_dir->entries_count;
 
         o->external_dir->entries = realloc(o->external_dir->entries,
-                                           total * sizeof(Edje_External_Directory_Entry));
+                          total * sizeof(Edje_External_Directory_Entry));
 
         memcpy(&o->external_dir->entries[base], edf->external_dir->entries,
                edf->external_dir->entries_count *
