@@ -211,7 +211,11 @@ _clip_set(Eo *eo_obj, void *_pd, va_list *list)
    if (!eo_clip)
      {
         evas_object_clip_unset(eo_obj);
-        return;
+
+        e = obj->layer->evas;
+        eo_clip = e->framespace.clip;
+        if (eo_obj == eo_clip) return;
+        if (obj->is_frame) return;
      }
 
    MAGIC_CHECK(eo_clip, Evas_Object, MAGIC_OBJ);
