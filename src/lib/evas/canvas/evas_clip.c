@@ -322,11 +322,11 @@ _clip_set(Eo *eo_obj, void *_pd, va_list *list)
 
    /* If it's NOT a rectangle set the mask bits too */
    /* FIXME: Optmz ths chck */
-   if (clip->type != o_rect_type)
-     {
-        ERR("Not supported clipping to type '%s', just rectangles.",
-            clip->type);
-     }
+   /* if (clip->type != o_rect_type) */
+   /*   { */
+   /*      ERR("Not supported clipping to type '%s', just rectangles.", */
+   /*          clip->type); */
+   /*   } */
    evas_object_change(eo_clip, clip);
    evas_object_change(eo_obj, obj);
    evas_object_clip_dirty(eo_obj, obj);
