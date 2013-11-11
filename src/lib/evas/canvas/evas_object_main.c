@@ -2368,13 +2368,8 @@ _is_frame_object_set(Eo *eo_obj, void *_pd, va_list *list)
 {
    Eina_Bool is_frame = va_arg(*list, int);
    Evas_Object_Protected_Data *obj = _pd;
-   Evas_Coord x, y;
-
-   evas_object_geometry_get(eo_obj, &x, &y, NULL, NULL);
 
    _is_frame_flag_set(obj, is_frame);
-
-   evas_object_move(eo_obj, x, y);
 }
 
 EAPI Eina_Bool
