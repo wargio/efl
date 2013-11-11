@@ -366,7 +366,13 @@ _clip_get(Eo *eo_obj EINA_UNUSED, void *_pd, va_list *list)
    *clip = NULL;
 
    if (obj->cur->clipper)
-     *clip = obj->cur->clipper->object;
+     {
+        Evas_Public_Data *e;
+
+        e = obj->layer->evas;
+        if (obj->cur->clipper->object != e->framespace.clip)
+          *clip = obj->cur->clipper->object;
+     }
 }
 
 EAPI void
