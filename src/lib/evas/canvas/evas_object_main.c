@@ -2370,6 +2370,7 @@ _is_frame_object_set(Eo *eo_obj, void *_pd, va_list *list)
    Evas_Object_Protected_Data *obj = _pd;
 
    _is_frame_flag_set(obj, is_frame);
+   if (is_frame) evas_object_clip_set(eo_obj, NULL);
 }
 
 EAPI Eina_Bool
