@@ -188,6 +188,15 @@ _constructor(Eo *eo_obj, void *class_data, va_list *list EINA_UNUSED)
    EVAS_ARRAY_SET(e, texts_unref_queue);
 
 #undef EVAS_ARRAY_SET
+
+   /* add framespace clip for every canvas */
+   e->framespace.clip = evas_object_rectangle_add(eo_obj);
+   evas_object_color_set(e->framespace.clip, 255, 255, 255, 255);
+   evas_object_move(e->framespace.clip, 0, 0);
+   evas_object_resize(e->framespace.clip, 1, 1);
+   evas_object_pass_events_set(e->framespace.clip, EINA_TRUE);
+   evas_object_layer_set(e->framespace.clip, EVAS_LAYER_MIN);
+   evas_object_show(e->framespace.clip);
 }
 
 EAPI void
@@ -510,6 +519,15 @@ _canvas_output_viewport_set(Eo *eo_e EINA_UNUSED, void *_pd, va_list *list)
    e->viewport.w = w;
    e->viewport.h = h;
    e->viewport.changed = 1;
+
+   if (e->framespace.clip)
+     {
+        evas_object_move(e->framespace.clip, e->viewport.x, e->viewport.y);
+        evas_object_resize(e->framespace.clip, 
+                           e->viewport.w - e->framespace.w, 
+                           e->viewport.h - e->framespace.h);
+     }
+
    e->output_validity++;
    e->changed = 1;
 }
@@ -569,6 +587,15 @@ _canvas_output_framespace_set(Eo *eo_e EINA_UNUSED, void *_pd, va_list *list)
    e->framespace.w = w;
    e->framespace.h = h;
    e->framespace.changed = 1;
+
+   if (e->framespace.clip)
+     {
+        evas_object_move(e->framespace.clip, e->viewport.x, e->viewport.y);
+        evas_object_resize(e->framespace.clip, 
+                           e->viewport.w - e->framespace.w, 
+                           e->viewport.h - e->framespace.h);
+     }
+
    e->output_validity++;
    e->changed = 1;
 }
