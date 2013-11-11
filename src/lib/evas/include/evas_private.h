@@ -292,7 +292,6 @@ struct _Evas_Smart
 
    unsigned char     delete_me : 1;
    unsigned char     class_allocated : 1;
-
 };
 
 struct _Evas_Modifier
