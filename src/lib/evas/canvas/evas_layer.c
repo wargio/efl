@@ -237,7 +237,7 @@ _layer_set(Eo *eo_obj, void *_obj, va_list *list)
         contained = (Eina_Inlist *)evas_object_smart_members_get_direct(eo_obj);
         EINA_INLIST_FOREACH(contained, member)
           {
-            _evas_object_layer_set_child(member->object, eo_obj, l);
+             _evas_object_layer_set_child(member->object, eo_obj, l);
           }
      }
    evas_object_inform_call_restack(eo_obj);

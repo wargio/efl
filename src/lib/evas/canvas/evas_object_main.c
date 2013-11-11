@@ -44,11 +44,18 @@ Eina_Cow *evas_object_state_cow = NULL;
 static Eina_Bool
 _init_cow(void)
 {
-   if (evas_object_map_cow && evas_object_proxy_cow && evas_object_state_cow) return EINA_TRUE;
+   if (evas_object_map_cow && evas_object_proxy_cow && evas_object_state_cow) 
+     return EINA_TRUE;
 
-   evas_object_proxy_cow = eina_cow_add("Evas Object Proxy", sizeof (Evas_Object_Proxy_Data), 8, &default_proxy, EINA_TRUE);
-   evas_object_map_cow = eina_cow_add("Evas Object Map", sizeof (Evas_Object_Map_Data), 8, &default_map, EINA_TRUE);
-   evas_object_state_cow = eina_cow_add("Evas Object State", sizeof (Evas_Object_Protected_State), 64, &default_state, EINA_FALSE);
+   evas_object_proxy_cow = 
+     eina_cow_add("Evas Object Proxy", sizeof (Evas_Object_Proxy_Data), 
+                  8, &default_proxy, EINA_TRUE);
+   evas_object_map_cow = 
+     eina_cow_add("Evas Object Map", sizeof (Evas_Object_Map_Data), 
+                  8, &default_map, EINA_TRUE);
+   evas_object_state_cow = 
+     eina_cow_add("Evas Object State", sizeof (Evas_Object_Protected_State), 
+                  64, &default_state, EINA_FALSE);
 
    if (!(evas_object_map_cow && evas_object_proxy_cow && evas_object_state_cow))
      {
@@ -74,7 +81,7 @@ _constructor(Eo *eo_obj, void *_pd, va_list *list EINA_UNUSED)
    eo_manual_free_set(eo_obj, EINA_TRUE);
 
    obj = _pd;
-   if (!obj || !_init_cow())
+   if ((!obj) || (!_init_cow()))
      {
         eo_error_set(eo_obj);
         return;
@@ -2038,8 +2045,9 @@ evas_object_top_at_pointer_get(const Evas *eo_e)
    Evas_Public_Data *e = eo_data_scope_get(eo_e, EVAS_CLASS);
    Evas_Object *ret = NULL;
    if (!e) return NULL;
-   eo_do((Eo *)eo_e, evas_canvas_object_top_at_xy_get(e->pointer.x, e->pointer.y, EINA_TRUE,
-                                    EINA_TRUE, &ret));
+   eo_do((Eo *)eo_e, 
+         evas_canvas_object_top_at_xy_get(e->pointer.x, e->pointer.y, 
+                                          EINA_TRUE, EINA_TRUE, &ret));
    return ret;
 }
 
@@ -2144,7 +2152,7 @@ _canvas_objects_at_xy_get(Eo *eo_e EINA_UNUSED, void *_pd, va_list *list)
              // FIXME - Daniel: we don't know yet how to handle the next line
              if (obj->delete_me) continue;
              if ((!include_pass_events_objects) &&
-                   (evas_event_passes_through(eo_obj, obj))) continue;
+                 (evas_event_passes_through(eo_obj, obj))) continue;
              if (evas_object_is_source_invisible(eo_obj, obj)) continue;
              if ((!include_hidden_objects) && (!obj->cur->visible)) continue;
              evas_object_clip_recalc(obj);

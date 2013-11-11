@@ -192,9 +192,7 @@ evas_object_mapped_clip_across_mark(Evas_Object *eo_obj, Evas_Object_Protected_D
 extern const char *o_rect_type;
 
 EAPI void
-evas_object_clip_set(
-      Evas_Object *eo_obj,
-      Evas_Object *clip)
+evas_object_clip_set(Evas_Object *eo_obj, Evas_Object *clip)
 {
    MAGIC_CHECK(eo_obj, Evas_Object, MAGIC_OBJ);
    return;
@@ -387,7 +385,8 @@ _clip_unset(Eo *eo_obj, void *_pd, va_list *list EINA_UNUSED)
 
    if (!obj->cur->clipper) return;
 
-   obj->clip.cache_clipees_answer = eina_list_free(obj->clip.cache_clipees_answer);
+   obj->clip.cache_clipees_answer = 
+     eina_list_free(obj->clip.cache_clipees_answer);
 
    /* unclip */
    if (evas_object_intercept_call_clip_unset(eo_obj, obj)) return;
@@ -397,7 +396,8 @@ _clip_unset(Eo *eo_obj, void *_pd, va_list *list EINA_UNUSED)
      }
    if (obj->cur->clipper)
      {
-        obj->cur->clipper->clip.clipees = eina_list_remove(obj->cur->clipper->clip.clipees, obj);
+        obj->cur->clipper->clip.clipees = 
+          eina_list_remove(obj->cur->clipper->clip.clipees, obj);
         if (!obj->cur->clipper->clip.clipees)
           {
              EINA_COW_STATE_WRITE_BEGIN(obj->cur->clipper, state_write, cur)

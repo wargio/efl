@@ -257,9 +257,9 @@ _destructor(Eo *eo_e, void *_pd, va_list *list EINA_UNUSED)
    e->name_hash = NULL;
 
    EINA_LIST_FREE(e->damages, r)
-      eina_rectangle_free(r);
+     eina_rectangle_free(r);
    EINA_LIST_FREE(e->obscures, r)
-      eina_rectangle_free(r);
+     eina_rectangle_free(r);
 
    evas_fonts_zero_free(eo_e);
 
