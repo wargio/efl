@@ -143,7 +143,7 @@ evas_object_free(Evas_Object *eo_obj, int clean_layer)
    if (!obj) return;
    obj->clean_layer = clean_layer;
 
-   int was_smart_child = 0;
+   Eina_Bool was_smart_child = EINA_FALSE;
 
    _evas_object_image_free(eo_obj);
    evas_object_map_set(eo_obj, NULL);
@@ -163,7 +163,7 @@ evas_object_free(Evas_Object *eo_obj, int clean_layer)
      }
    evas_object_grabs_cleanup(eo_obj, obj);
    evas_object_intercept_cleanup(eo_obj);
-   if (obj->smart.parent) was_smart_child = 1;
+   if (obj->smart.parent) was_smart_child = EINA_TRUE;
    evas_object_smart_cleanup(eo_obj);
    if (obj->func->free)
      {
