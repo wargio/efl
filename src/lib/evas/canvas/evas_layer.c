@@ -23,6 +23,9 @@ evas_object_inject(Evas_Object *eo_obj, Evas_Object_Protected_Data *obj, Evas *e
    lay->usage++;
    obj->layer = lay;
    obj->in_layer = 1;
+
+   if (!obj->cur->clipper)
+     evas_object_clip_set(eo_obj, obj->layer->evas->framespace.clip);
 }
 
 void
