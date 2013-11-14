@@ -210,20 +210,23 @@ _clip_set(Eo *eo_obj, void *_pd, va_list *list)
 
    if (!eo_clip)
      {
-        evas_object_clip_unset(eo_obj);
-
         e = obj->layer->evas;
         eo_clip = e->framespace.clip;
         if (eo_obj == eo_clip) return;
-        if (obj->is_frame) return;
+
+        if ((obj->cur->clipper) && 
+            (obj->cur->clipper->object == eo_clip)) return;
+
+//        evas_object_clip_unset(eo_obj);
      }
 
    MAGIC_CHECK(eo_clip, Evas_Object, MAGIC_OBJ);
    return;
    MAGIC_CHECK_END();
 
-   clip = eo_data_scope_get(eo_clip, EVAS_OBJ_CLASS);
    if (obj->cur->clipper && obj->cur->clipper->object == eo_clip) return;
+
+   clip = eo_data_scope_get(eo_clip, EVAS_OBJ_CLASS);
    if (eo_obj == eo_clip)
      {
         CRIT("Setting clip %p on itself", eo_obj);
