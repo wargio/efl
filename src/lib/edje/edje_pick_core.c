@@ -1,34 +1,7 @@
 #include "Edje_Pick.h"
 #include "edje_private.h"
 
-static Edje_Pick *context = NULL;
 static unsigned char *init_count = 0;
-
-#define EDJE_PICK_HELP_STRING \
-"\nEdje Pick - the \"edj\" merging tool.\n\
-===================================\n\n\
-Use Edje Pick to compose a single edj file \
-by selecting groups from edj files.\n\n\
-Use Edje Pick as follows:\n\
-Include files with \'--include\' file-name\n\
-Follow the included file-name by names of selected groups from this file.\n\
-To select a group use: \'--group\' group-name.\n\n\
-You must specify merged file name with \'--output\' file-name.\n\
-Use '--verbose' switch to get detailed log.\n\n\
-To produce 3rd file \'out.edj\' that composed  of:\n\
-Group \'test\' from \'ex1.edj\' and \'test2\', \'test3\', from \'ex2.edj\'\n\
-edje_pick -i ex1.edj -g test -i ex2.edj -g test2 -g test3 -o out.edj\n\n\
-By using \'--append\' whole file content is selected.\n\
-No need to specify selected groups with this switch.\n\
-Note that selected group with will override group with the same name\n\
-from appended-file when using \'--append\' switch.\n\n\
-Example, the command:\n\
-edje_pick -a theme1.edj -i default.edj -g elm/button/base/default \
--g elm/check/base/default -o hybrid.edj\n\n\
-will produce a 3rd theme file \'hybrid.edj\',\n\
-composed of all theme1.edj components.\n\
-Replacing the button and check with widgets taken from default theme.\n\
-(Given that theme1.edj button, check group-name are as in default.edj)\n"
 
 struct _Edje_Pick_Id
 {
@@ -38,7 +11,7 @@ struct _Edje_Pick_Id
 };
 typedef struct _Edje_Pick_Id Edje_Pick_Id;
 
-struct _Edje_Pick_File_Params
+struct _Edje_Pick_File_Info
 {
    const char *name;
    Eina_List *groups;
@@ -53,7 +26,7 @@ struct _Edje_Pick_File_Params
    Eina_List *samplelist;
    Eina_List *tonelist;
 };
-typedef struct _Edje_Pick_File_Params Edje_Pick_File_Params;
+typedef struct _Edje_Pick_File_Info Edje_Pick_File_Info;
 
 struct _Edje_Pick_Data
 {
@@ -80,14 +53,17 @@ struct _Edje_Pick_Font
 };
 typedef struct _Edje_Pick_Font Edje_Pick_Font;
 
-struct _Edje_Pick
+struct _Edje_Pick_Session
 {
    Eina_Bool v; /* Verbose */
-   int current_group_id;
-   Edje_Pick_File_Params *current_file;
+   Eina_List *input_files_infos; /* List of Edje_Pick_File_Info * */
+   Edje_Pick_File_Info output_info;
+   Eet_File *output_ef;
    Eina_List *fontlist;
-   const char *errfile;
-   const char *errgroup;
+   Eina_Hash *groups_hash;
+   int next_group_id;
+   int next_img_id;
+   int next_sample_id;
 };
 
 EAPI void
@@ -101,7 +77,7 @@ edje_pick_init(void)
         _edje_edd_init();
      }
 
-#define VERBOSE(COMMAND) if (context->v) { COMMAND; }
+#define VERBOSE(COMMAND) if (session->v) { COMMAND; }
 
    init_count++;
 }
@@ -124,22 +100,12 @@ edje_pick_shutdown(void)
      }
 }
 
-EAPI Edje_Pick *
-edje_pick_context_new(void)
+EAPI Edje_Pick_Session *
+edje_pick_session_new()
 {
-   return calloc(1, sizeof(Edje_Pick));
-}
-
-EAPI void
-edje_pick_context_free(Edje_Pick *c)
-{
-   free(c);
-}
-
-EAPI void
-edje_pick_context_set(Edje_Pick *c)
-{
-   context = c;
+   Edje_Pick_Session *session = calloc(1, sizeof(Edje_Pick_Session));
+   session->groups_hash = eina_hash_stringshared_new(NULL);
+   return session;
 }
 
 static void
@@ -200,135 +166,43 @@ _edje_pick_out_file_free(Edje_File *out_file)
      }
 }
 
-static void
-_edje_pick_args_show(Eina_List *ifs, char *out)
-{  /* Print command-line arguments after parsing phase */
-   Edje_Pick_File_Params *p;
-   Eina_List *l;
-   char *g;
+EAPI void
+edje_pick_session_del(Edje_Pick_Session *session)
+{
+   Edje_Pick_File_Info *info;
+   _edje_pick_out_file_free(session->output_info.edf);
 
-   EINA_LOG_INFO("Got args for <%d> input files.\n", eina_list_count(ifs));
-
-   EINA_LIST_FOREACH(ifs, l, p)
+   EINA_LIST_FREE(session->input_files_infos, info)
      {
-        Eina_List *ll;
+        char *name;
+        EINA_LIST_FREE(info->groups, name)
+          eina_stringshare_del(name);
 
-        if (p->append)
-          printf("\nFile name: %s\n\tGroups: ALL (append mode)\n", p->name);
-        else
-          {
-             printf("\nFile name: %s\n\tGroups:\n", p->name);
-             EINA_LIST_FOREACH(p->groups, ll, g)
-                printf("\t\t%s\n", g);
-          }
+        _edje_pick_data_free(info->scriptlist);
+        info->scriptlist = NULL;
+
+        _edje_pick_data_free(info->luascriptlist);
+        info->luascriptlist = NULL;
+
+        _edje_pick_data_free(info->imagelist);
+        info->imagelist = NULL;
+
+        _edje_pick_data_free(info->imagesetlist);
+        info->imagesetlist = NULL;
+
+        _edje_pick_data_free(info->samplelist);
+
+        EINA_LIST_FREE(info->tonelist, name)
+          free(name);
+
+        if (info->edf)
+          _edje_cache_file_unref(info->edf);
+
+        free(info);
      }
 
-   EINA_LOG_INFO("\nOutput file name was <%s>\n", out);
-}
-
-EAPI const char *
-edje_pick_err_str_get(Edje_Pick_Status s)
-{
-   const char *err = NULL;
-
-   switch (s)
-     {
-      case EDJE_PICK_NO_ERROR:
-         err = NULL;
-         break;
-      case EDJE_PICK_OUT_FILENAME_MISSING:
-         err = "Output file name missing.";
-         break;
-      case EDJE_PICK_FAILED_OPEN_INP:
-         err = "Failed to open input file.";
-         break;
-      case EDJE_PICK_FAILED_READ_INP:
-         err = "Failed to read input file.";
-         break;
-      case EDJE_PICK_DUP_GROUP:
-         err = "Can't fetch groups with identical name from various files.";
-         break;
-      case EDJE_PICK_NO_GROUP:
-         err = "No groups to fetch from input files.";
-         break;
-      case EDJE_PICK_INCLUDE_MISSING:
-         err = "Cannot select groups when no input file included.";
-         break;
-      case EDJE_PICK_GROUP_MISSING:
-         err = "Group name missing for include file.";
-         break;
-      case EDJE_PICK_PARSE_FAILED:
-         err = "Command parsing failed.";
-         break;
-      case EDJE_PICK_FILE_OPEN_FAILED:
-         err = "Failed to open file.";
-         break;
-      case EDJE_PICK_FILE_READ_FAILED:
-         err = "Failed to read file.";
-         break;
-      case EDJE_PICK_FILE_COLLECTION_EMPTY:
-         err = "File collection is empty (corrupted?).";
-         break;
-      default:
-         err = "Undefined Status";
-     }
-
-   return err;
-}
-
-static int
-_edje_pick_cleanup(Eina_List *ifs, Edje_File *out_file, Edje_Pick_Status s,
-      Eina_List *a_files, Eina_List *i_files, Eina_List *groups,
-      const char *errfile, const char *errgroup)
-{
-   Edje_Pick_File_Params *p;
    Edje_Pick_Font *ft;
-   void *n;
-
-   if (context)
-     {  /* Update User struct with err data */
-        if (context->errfile) eina_stringshare_del(context->errfile);
-        if (context->errgroup) eina_stringshare_del(context->errgroup);
-
-        context->errfile = context->errgroup = NULL;
-        if (errfile) context->errfile = eina_stringshare_add(errfile);
-        if (errgroup) context->errgroup = eina_stringshare_add(errgroup);
-     }
-
-   if (a_files) ecore_getopt_list_free(a_files);
-   if (i_files) ecore_getopt_list_free(i_files);
-   if (groups) ecore_getopt_list_free(groups);
-   _edje_pick_out_file_free(out_file);
-
-   EINA_LIST_FREE(ifs, p)
-     {
-        EINA_LIST_FREE(p->groups, n)
-          eina_stringshare_del(n);
-
-        _edje_pick_data_free(p->scriptlist);
-        p->scriptlist = NULL;
-
-        _edje_pick_data_free(p->luascriptlist);
-        p->luascriptlist = NULL;
-
-        _edje_pick_data_free(p->imagelist);
-        p->imagelist = NULL;
-
-        _edje_pick_data_free(p->imagesetlist);
-        p->imagesetlist = NULL;
-
-        _edje_pick_data_free(p->samplelist);
-
-        EINA_LIST_FREE(p->tonelist, n)
-          free(n);
-
-        if (p->edf)
-          _edje_cache_file_unref(p->edf);
-
-        free(p);
-     }
-
-   EINA_LIST_FREE(context->fontlist, ft)
+   EINA_LIST_FREE(session->fontlist, ft)
      {
         Edje_Font *st = ft->f;
 
@@ -337,217 +211,118 @@ _edje_pick_cleanup(Eina_List *ifs, Edje_File *out_file, Edje_Pick_Status s,
         free(st);
         free(ft);
      }
+   free(session);
+}
 
-   if (edje_pick_err_str_get(s))
-     EINA_LOG_ERR("%s\n", edje_pick_err_str_get(s));
+EAPI Eina_Bool
+edje_pick_input_file_add(Edje_Pick_Session *session, const char *name)
+{
+   Edje_Pick_File_Info *info = calloc(1, sizeof(*info));
+   info->append = EINA_TRUE;
+   info->name = eina_stringshare_add(name);
+   session->input_files_infos = eina_list_append(session->input_files_infos, info);
+   return EINA_TRUE;
+}
 
-   context = NULL;
-
-   return s;
+EAPI Eina_Bool
+edje_pick_output_file_add(Edje_Pick_Session *session, const char *name)
+{
+   session->output_info.name = eina_stringshare_add(name);
+   return EINA_TRUE;
 }
 
 /* Look for group name in all input files that are not d1 */
-static int
-_group_name_in_other_file(Eina_List *inp_files, void *d1, void *d2)
+static Eina_Bool
+_is_group_already_present(Edje_Pick_Session *session, const char *group_name)
 {
-   Edje_Pick_File_Params *inp_file = d1;
-   char *group = d2; /* Group name to search */
-   Eina_List *f;
-   Edje_Pick_File_Params *current_file;
-
-   EINA_LIST_FOREACH(inp_files, f, current_file)
-     {
-        if (inp_file->name != current_file->name)
-          if (eina_list_search_unsorted(current_file->groups,
-                   (Eina_Compare_Cb) strcmp,
-                   group))
-            return 1;
-     }
-
-   return 0;  /* Not found */
+   return !!eina_hash_find(session->groups_hash, group_name);
 }
 
-EAPI int
-edje_pick_command_line_parse(int argc, char **argv,
-			      Eina_List **ifs, char **ofn,
-                              Eina_Bool cleanup)
-{  /* On return ifs is Input Files List, ofn is Output File Name */
-   Eina_List *gpf = NULL; /* List including counters of groups-per-file */
-   Eina_List *a_files = NULL;
-   Eina_List *i_files = NULL;
-   Eina_List *l;
-   Eina_List *ll;
-   Eina_List *cg;
-   Eina_List *groups = NULL;
-   char *output_filename = NULL;
-   Edje_Pick_File_Params *current_inp = NULL;
-   Eina_List *files = NULL;  /* List of input files */
-   int *c = NULL;
-   char *str = NULL;
-   int k;
-   Eina_Bool show_help = EINA_FALSE;
-
-   /* Define args syntax */
-#define IS_GROUP(x) ((!strcmp(x, "-g")) || (!strcmp(x, "--group")))
-#define IS_INCLUDE(x) ((!strcmp(x, "-i")) || (!strcmp(x, "--include")))
-#define IS_HELP(x) ((!strcmp(x, "-h")) || (!strcmp(x, "--help")))
-   static const Ecore_Getopt optdesc = {
-        "edje_pick",
-        NULL,
-        "0.0",
-        "(C) 2012 Enlightenment",
-        "Public domain?",
-        "Edje Pick - the \"edj\" merging tool.",
-
-        EINA_TRUE,
-        {
-           ECORE_GETOPT_STORE_TRUE('v', "verbose", "Verbose"),
-           ECORE_GETOPT_STORE('o', "output", "Output File",
-                 ECORE_GETOPT_TYPE_STR),
-           ECORE_GETOPT_APPEND_METAVAR('a', "append", "Append File",
-                 "STRING", ECORE_GETOPT_TYPE_STR),
-           ECORE_GETOPT_APPEND_METAVAR('i', "include", "Include File",
-                 "STRING", ECORE_GETOPT_TYPE_STR),
-           ECORE_GETOPT_APPEND_METAVAR('g', "group", "Add Group",
-                 "STRING", ECORE_GETOPT_TYPE_STR),
-           ECORE_GETOPT_HELP('h', "help"),
-           ECORE_GETOPT_SENTINEL
-        }
-   };
-
-   Ecore_Getopt_Value values[] = {
-        ECORE_GETOPT_VALUE_BOOL(context->v),
-        ECORE_GETOPT_VALUE_STR(output_filename),
-        ECORE_GETOPT_VALUE_LIST(a_files),
-        ECORE_GETOPT_VALUE_LIST(i_files),
-        ECORE_GETOPT_VALUE_LIST(groups),
-        ECORE_GETOPT_VALUE_NONE
-   };
-
-   /* START - Read command line args */
-   c = NULL;
-   for(k = 1; k < argc; k++)
-     {  /* Run through args, count how many groups per file */
-        if(IS_GROUP(argv[k]))
-          {
-             if (!c)
-               return _edje_pick_cleanup(files, NULL,
-                     EDJE_PICK_INCLUDE_MISSING, a_files, i_files, groups,
-                     NULL, NULL);
-
-             (*c)++;
-             continue;
-          }
-
-        if(IS_INCLUDE(argv[k]))
-          {
-             c = calloc(1, sizeof(int));
-             gpf = eina_list_append(gpf, c);
-             continue;
-          }
-
-        show_help |= IS_HELP(argv[k]);
-     }
-
-   if (show_help)
-     puts(EDJE_PICK_HELP_STRING);
-
-   if (ecore_getopt_parse(&optdesc, values, argc, argv) < 0)
+EAPI Eina_Bool
+edje_pick_group_add(Edje_Pick_Session *session, const char *in_file, const char *in_group)
+{
+   Eina_List *itr;
+   Edje_Pick_File_Info *info, *in_info = NULL;
+   const char *in_str = eina_stringshare_add(in_file);
+   if (_is_group_already_present(session, in_group))
+      return EINA_FALSE;
+   EINA_LIST_FOREACH(session->input_files_infos, itr, info)
      {
-        EINA_LIST_FREE(gpf, c)
-           free(c);
-
-        return _edje_pick_cleanup(files, NULL, EDJE_PICK_PARSE_FAILED,
-              a_files, i_files, groups, NULL, NULL);
-     }
-
-   if (show_help)
-     {
-        EINA_LIST_FREE(gpf, c)
-           free(c);
-
-        return _edje_pick_cleanup(files, NULL, EDJE_PICK_HELP_SHOWN,
-              a_files, i_files, groups, NULL, NULL);
-     }
-
-   if (context->v)  /* Changed to INFO if verbose */
-     eina_log_level_set(EINA_LOG_LEVEL_INFO);
-
-   EINA_LIST_FOREACH(a_files, l, str)
-     {
-        current_inp = calloc(1, sizeof(*current_inp));
-        current_inp->append = EINA_TRUE;
-        current_inp->name = eina_stringshare_add(str);
-        files = eina_list_append(files, current_inp);
-     }
-
-   ll = gpf;
-   cg = groups;
-   EINA_LIST_FOREACH(i_files, l, str)
-     {  /* Now match groups from groups-list with included files */
-        current_inp = calloc(1, sizeof(*current_inp));
-        current_inp->name = eina_stringshare_add(str);
-        files = eina_list_append(files, current_inp);
-        c = eina_list_data_get(ll);
-        if (c)
+        if (!strcmp(info->name, in_str))
           {
-             while(*c)
-               {
-                  char *g_name;
-                  if (!cg)
-                    {
-                       EINA_LIST_FREE(gpf, c)
-                          free(c);
-
-                       return _edje_pick_cleanup(files, NULL,
-                             EDJE_PICK_GROUP_MISSING,
-                             a_files, i_files, groups, NULL, NULL);
-                    }
-
-
-                  g_name = eina_list_data_get(cg);
-                  if (_group_name_in_other_file(files, current_inp, g_name))
-                    return _edje_pick_cleanup(files, NULL, EDJE_PICK_DUP_GROUP,
-                          a_files, i_files, groups, current_inp->name, g_name);
-
-                  if (!eina_list_search_unsorted(current_inp->groups,
-                           (Eina_Compare_Cb) strcmp, g_name))
-                    {
-                       current_inp->groups = eina_list_append(
-                             current_inp->groups, eina_stringshare_add(g_name));
-                    }
-
-                  cg = eina_list_next(cg);
-                  (*c)--;
-               }
+             in_info = info;
+             break;
           }
-        ll = eina_list_next(ll);
+     }
+   if (!in_info)
+     {
+        in_info = calloc(1, sizeof(*in_info));
+        in_info->append = EINA_TRUE;
+        in_info->name = in_str;
+        session->input_files_infos = eina_list_append(session->input_files_infos, in_info);
+     }
+   in_info->groups = eina_list_append(in_info->groups, eina_stringshare_add(in_group));
+   eina_hash_add(session->groups_hash, in_group, &itr); // the data is not important, just not NULL
+   return EINA_TRUE;
+}
+
+static void
+_session_print(const Edje_Pick_Session *session)
+{  /* Print command-line arguments after parsing phase */
+   Edje_Pick_File_Info *info;
+   Eina_List *itr;
+   char *group_name;
+
+   EINA_LOG_INFO("Got infos for <%d> input files.\n", eina_list_count(session->input_files_infos));
+
+   EINA_LIST_FOREACH(session->input_files_infos, itr, info)
+     {
+        if (info->append)
+          printf("\nFile name: %s\n\tGroups: ALL (append mode)\n", info->name);
+        else
+          {
+             Eina_List *itr2;
+             printf("\nFile name: %s\n\tGroups:\n", info->name);
+             EINA_LIST_FOREACH(info->groups, itr2, group_name)
+                printf("\t\t%s\n", group_name);
+          }
      }
 
-   EINA_LIST_FREE(gpf, c)
-      free(c);
+   EINA_LOG_INFO("\nOutput file name was <%s>\n", session->output_info.name);
+}
 
-   ecore_getopt_list_free(a_files);
-   a_files = NULL;
-   ecore_getopt_list_free(i_files);
-   i_files = NULL;
-   ecore_getopt_list_free(groups);
-   groups = NULL;
-
-
-   if (!output_filename)
-     return _edje_pick_cleanup(files, NULL, EDJE_PICK_OUT_FILENAME_MISSING,
-           a_files, i_files, groups, NULL, NULL);
-   /* END   - Read command line args */
-
-   if (cleanup)  /* In case GUI call this just to do parsing */
-     return _edje_pick_cleanup(files, NULL, EDJE_PICK_NO_ERROR,
-           a_files, i_files, groups, NULL, NULL);
-
-   /* Set output params, return OK */
-   *ifs = files;
-   *ofn = output_filename;
-   return EDJE_PICK_NO_ERROR;
+EAPI const char *
+edje_pick_error_get_as_string(Edje_Pick_Status s)
+{
+   switch (s)
+     {
+      case EDJE_PICK_NO_ERROR:
+         return NULL;
+      case EDJE_PICK_OUT_FILENAME_MISSING:
+         return "Output file name missing.";
+      case EDJE_PICK_FAILED_OPEN_INP:
+         return "Failed to open input file.";
+      case EDJE_PICK_FAILED_READ_INP:
+         return "Failed to read input file.";
+      case EDJE_PICK_FAILED_ADD_GROUP:
+         return "Failed to add group.";
+      case EDJE_PICK_NO_GROUP:
+         return "No groups to fetch from input files.";
+      case EDJE_PICK_INCLUDE_MISSING:
+         return "Cannot select groups when no input file included.";
+      case EDJE_PICK_GROUP_MISSING:
+         return "Group name missing for include file.";
+      case EDJE_PICK_PARSE_FAILED:
+         return "Command parsing failed.";
+      case EDJE_PICK_FILE_OPEN_FAILED:
+         return "Failed to open file.";
+      case EDJE_PICK_FILE_READ_FAILED:
+         return "Failed to read file.";
+      case EDJE_PICK_FILE_COLLECTION_EMPTY:
+         return "File collection is empty (corrupted?).";
+      default:
+         return "Undefined Status";
+     }
 }
 
 static void
@@ -577,9 +352,11 @@ _edje_pick_external_dir_update(Edje_File *o, Edje_File *edf)
      }
 }
 
-static Edje_File *
-_edje_pick_output_prepare(Edje_File *o, Edje_File *edf, char *name)
+static void
+_session_output_prepare(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info)
 {
+   Edje_File *edf = in_info->edf;
+   Edje_File *o = session->output_info.edf;
    /* Allocate and prepare header memory buffer */
    if (!o)
      {
@@ -591,7 +368,8 @@ _edje_pick_output_prepare(Edje_File *o, Edje_File *edf, char *name)
         o->collection = eina_hash_string_small_new(NULL);
 
         /* Open output file */
-        o->ef = eet_open(name, EET_FILE_MODE_WRITE);
+        o->ef = eet_open(session->output_info.name, EET_FILE_MODE_WRITE);
+        session->output_info.edf = o;
      }
    else
      {
@@ -618,26 +396,23 @@ _edje_pick_output_prepare(Edje_File *o, Edje_File *edf, char *name)
      }
 
    _edje_pick_external_dir_update(o, edf);
-   return o;
 }
 
-static int
-_edje_pick_header_make(Edje_File *out_file , Edje_File *edf, Eina_List *ifs)
+static Edje_Pick_Status
+_header_make(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info)
 {
    Edje_Part_Collection_Directory_Entry *ce;
    Eina_Bool status = EDJE_PICK_NO_ERROR;
-   Eina_List *l;
-   char *name1 = NULL;
-
+   char *group_name = NULL;
+   Edje_File *edf = in_info->edf;
 
    _edje_cache_file_unref(edf);
 
    /* Build file header */
-   if (context->current_file->append)
+   if (in_info->append)
      {
-        Eina_Iterator *i;
-        i = eina_hash_iterator_key_new(edf->collection);
-        EINA_ITERATOR_FOREACH(i, name1)  /* Run through all keys */
+        Eina_Iterator *i = eina_hash_iterator_key_new(edf->collection);
+        EINA_ITERATOR_FOREACH(i, group_name)  /* Run through all keys */
           {
              Edje_Part_Collection_Directory_Entry *ce_out;
 
@@ -646,38 +421,38 @@ _edje_pick_header_make(Edje_File *out_file , Edje_File *edf, Eina_List *ifs)
              /* Done here because we don't read EDC before parse cmd line  */
              /* We SKIP group of file in append-mode if we got this group  */
              /* from file in include mode.                                 */
-             if (_group_name_in_other_file(ifs, context->current_file, name1))
+             if (_is_group_already_present(session, group_name))
                continue; /* Skip group of file in append mode */
 
-             ce = eina_hash_find(edf->collection, name1);
+             ce = eina_hash_find(edf->collection, group_name);
              ce_out = malloc(sizeof(*ce_out));
              memcpy(ce_out, ce, sizeof(*ce_out));
 
-             ce_out->id = context->current_group_id;
+             ce_out->id = session->next_group_id;
              EINA_LOG_INFO("Changing ID of group <%d> to <%d>\n",
                    ce->id, ce_out->id);
-             context->current_group_id++;
+             session->next_group_id++;
 
-             eina_hash_direct_add(out_file->collection, ce_out->entry, ce_out);
+             eina_hash_direct_add(session->output_info.edf->collection, ce_out->entry, ce_out);
 
              /* Add this group to groups to handle for this file */
-             context->current_file->groups = eina_list_append(
-                   context->current_file->groups, eina_stringshare_add(name1));
+             edje_pick_group_add(session, in_info->name, group_name);
           }
 
         eina_iterator_free(i);
      }
    else
      {
-        EINA_LIST_FOREACH(context->current_file->groups, l , name1)
+        Eina_List *itr;
+        EINA_LIST_FOREACH(in_info->groups, itr , group_name)
           {
              /* Verify group found then add to ouput file header */
-             ce = eina_hash_find(edf->collection, name1);
+             ce = eina_hash_find(edf->collection, group_name);
 
              if (!ce)
                {
                   EINA_LOG_ERR("Group <%s> was not found in <%s> file.\n",
-                         name1, context->current_file->name);
+                         group_name, in_info->name);
                   status = EDJE_PICK_GROUP_NOT_FOUND;
                }
              else
@@ -689,13 +464,12 @@ _edje_pick_header_make(Edje_File *out_file , Edje_File *edf, Eina_List *ifs)
 
                   memcpy(ce_out, ce, sizeof(*ce_out));
 
-                  ce_out->id = context->current_group_id;
+                  ce_out->id = session->next_group_id;
                   EINA_LOG_INFO("Changing ID of group <%d> to <%d>\n",
                         ce->id, ce_out->id);
-                  context->current_group_id++;
+                  session->next_group_id++;
 
-                  eina_hash_direct_add(out_file->collection,ce_out->entry,
-                        ce_out);
+                  eina_hash_direct_add(session->output_info.edf->collection,ce_out->entry, ce_out);
                }
           }
      }
@@ -732,15 +506,15 @@ _edje_pick_new_id_get(Eina_List *id_list, int id, Eina_Bool set_used)
    return id;
 }
 
-static int
-_edje_pick_images_add(Edje_File *edf, Edje_File *o)
+static Edje_Pick_Status
+_images_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info)
 {
-   char buf[1024];
+   char buf[100];
    int size;
    unsigned int k;
-   void *data;
    Eina_Bool status = EDJE_PICK_NO_ERROR;
-   static int current_img_id = 0;
+   Edje_File *edf = in_info->edf;
+   Edje_File *o = session->output_info.edf;
 
    if (edf->image_dir)
      {
@@ -753,7 +527,7 @@ _edje_pick_images_add(Edje_File *edf, Edje_File *o)
 
              snprintf(buf, sizeof(buf), "edje/images/%i", img->id);
              VERBOSE(EINA_LOG_INFO("Trying to read <%s>\n", img->entry));
-             data = eet_read(edf->ef, buf, &size);
+             void *data = eet_read(edf->ef, buf, &size);
              if (size)
                {  /* Advance image ID and register this in imagelist */
                   Edje_Pick_Data *image = malloc(sizeof(*image));
@@ -763,29 +537,28 @@ _edje_pick_images_add(Edje_File *edf, Edje_File *o)
                   image->size = size;
                   image->entry = (void *) img;  /* for output file image dir */
                   image->id.old_id = img->id;
-                  img->id = image->id.new_id = current_img_id;
+                  img->id = image->id.new_id = session->next_img_id;
                   image->id.used = EINA_FALSE;
 
                   VERBOSE(EINA_LOG_INFO("Read image <%s> data <%p> size <%d>\n",
                            buf, image->data, image->size));
 
-                  current_img_id++;
-                  context->current_file->imagelist = eina_list_append(
-                        context->current_file->imagelist, image);
+                  session->next_img_id++;
+                  in_info->imagelist = eina_list_append(
+                        in_info->imagelist, image);
                }
              else
                {
                   if (img->entry)
                     {
                        EINA_LOG_ERR("Image <%s> was not found in <%s> file.\n",
-                             img->entry , context->current_file->name);
-                       status = EDJE_PICK_IMAGE_NOT_FOUND;
+                             img->entry , in_info->name);
                     }
                   else
                     {
-                       EINA_LOG_ERR("Image entry <%s> was not found in <%s> file.\n", buf , context->current_file->name);
-                       status = EDJE_PICK_IMAGE_NOT_FOUND;
+                       EINA_LOG_ERR("Image entry <%s> was not found in <%s> file.\n", buf , in_info->name);
                     }
+                  status = EDJE_PICK_IMAGE_NOT_FOUND;
                   /* Should that really be freed? Or is some other handling needed? */
                   free(data);
                }
@@ -830,13 +603,13 @@ _edje_pick_images_add(Edje_File *edf, Edje_File *o)
                   set->id.new_id = k;
 
                   /* Save IDs in set-list, used in Desc update later */
-                  context->current_file->imagesetlist = eina_list_append(
-                        context->current_file->imagesetlist, set);
+                  in_info->imagesetlist = eina_list_append(
+                        in_info->imagesetlist, set);
 
                   o->image_dir->sets[k].id = k;  /* Fix new sets IDs */
                   EINA_LIST_FOREACH(o->image_dir->sets[k].entries, l, e)
                      e->id = _edje_pick_new_id_get(
-                           context->current_file->imagelist,
+                           in_info->imagelist,
                            e->id, EINA_FALSE);
                }
           }
@@ -845,14 +618,14 @@ _edje_pick_images_add(Edje_File *edf, Edje_File *o)
    return status;
 }
 
-static int
-_edje_pick_sounds_add(Edje_File *edf)
+static Edje_Pick_Status
+_sounds_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info)
 {
-   char buf[1024];
+   char buf[100];
    int size, k;
    void *data;
    Eina_Bool status = EDJE_PICK_NO_ERROR;
-   static int current_sample_id = 0;
+   Edje_File *edf = in_info->edf;
 
    if (edf->sound_dir)  /* Copy Sounds */
      {
@@ -872,20 +645,20 @@ _edje_pick_sounds_add(Edje_File *edf)
                   smpl->size = size;
                   smpl->entry = (void *) sample; /* for output file sound dir */
                   smpl->id.old_id = sample->id;
-                  sample->id = smpl->id.new_id = current_sample_id;
+                  sample->id = smpl->id.new_id = session->next_sample_id;
                   smpl->id.used = EINA_FALSE;
 
                   VERBOSE(EINA_LOG_INFO("Read <%s> sample data <%p> size <%d>\n",
                                  buf, smpl->data, smpl->size));
 
-                  current_sample_id++;
-                  context->current_file->samplelist =
-                    eina_list_append(context->current_file->samplelist, smpl);
+                  session->next_sample_id++;
+                  in_info->samplelist =
+                    eina_list_append(in_info->samplelist, smpl);
                }
              else
                {
                   EINA_LOG_ERR("Sample <%s> was not found in <%s> file.\n",
-                         sample->name, context->current_file->name);
+                         sample->name, in_info->name);
                   status = EDJE_PICK_SAMPLE_NOT_FOUND;
                   /* Should that really be freed? Or is some other handling needed? */
                   free(data);
@@ -899,11 +672,11 @@ _edje_pick_sounds_add(Edje_File *edf)
 
              t->tone = &edf->sound_dir->tones[k];
              /* Update ID to new ID */
-             t->tone->id = _edje_pick_new_id_get(context->current_file->samplelist,   /* From samplelist */
+             t->tone->id = _edje_pick_new_id_get(in_info->samplelist,   /* From samplelist */
                                                  t->tone->id, EINA_FALSE);
 
              t->used = EINA_FALSE;
-             context->current_file->tonelist = eina_list_append(context->current_file->tonelist, t);
+             in_info->tonelist = eina_list_append(in_info->tonelist, t);
           }
      }
 
@@ -921,14 +694,15 @@ _font_cmp(const void *d1, const void *d2)
            strcmp(f1->file, f2->file));
 }
 
-static int
-_Edje_Pick_Fonts_add(Edje_File *edf)
+static Edje_Pick_Status
+_fonts_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info)
 {
    Eet_Data_Descriptor *_font_list_edd = NULL;
    Eet_Data_Descriptor *_font_edd;
    Edje_Font_List *fl;
    Edje_Font *f;
    Eina_List *l;
+   Edje_File *edf = in_info->edf;
 
    _edje_data_font_list_desc_make(&_font_list_edd, &_font_edd);
    fl = eet_data_read(edf->ef, _font_list_edd, "edje_source_fontmap");
@@ -937,7 +711,7 @@ _Edje_Pick_Fonts_add(Edje_File *edf)
      {
         EINA_LIST_FOREACH(fl->list, l, f)
           {
-             if (!eina_list_search_unsorted(context->fontlist,
+             if (!eina_list_search_unsorted(session->fontlist,
                       _font_cmp, f))
                {
                   /* Add only fonts that are NOT regestered in our list */
@@ -949,7 +723,7 @@ _Edje_Pick_Fonts_add(Edje_File *edf)
 
                   ft->f = st;
                   ft->used = EINA_TRUE;  /* TODO: Fix this later */
-                  context->fontlist = eina_list_append(context->fontlist, ft);
+                  session->fontlist = eina_list_append(session->fontlist, ft);
                }
           }
 
@@ -962,12 +736,13 @@ _Edje_Pick_Fonts_add(Edje_File *edf)
    return EDJE_PICK_NO_ERROR;
 }
 
-static int
-_edje_pick_scripts_add(Edje_File *edf, int id, int new_id)
+static Edje_Pick_Status
+_scripts_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info, int id, int new_id)
 {
    int size;
    void *data;
-   char buf[1024];
+   char buf[100];
+   Edje_File *edf = in_info->edf;
 
    /* Copy Script */
    snprintf(buf, sizeof(buf), "edje/scripts/embryo/compiled/%i", id);
@@ -984,7 +759,7 @@ _edje_pick_scripts_add(Edje_File *edf, int id, int new_id)
 
         VERBOSE(EINA_LOG_INFO("Read embryo script <%s> data <%p> size <%d>\n",
                        buf, s->data, s->size));
-        context->current_file->scriptlist = eina_list_append(context->current_file->scriptlist, s);
+        in_info->scriptlist = eina_list_append(in_info->scriptlist, s);
      }
    else
      {
@@ -995,12 +770,13 @@ _edje_pick_scripts_add(Edje_File *edf, int id, int new_id)
    return EDJE_PICK_NO_ERROR;
 }
 
-static int
-_edje_pick_lua_scripts_add(Edje_File *edf, int id, int new_id)
+static Edje_Pick_Status
+_lua_scripts_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info, int id, int new_id)
 {
    int size;
    void *data;
-   char buf[1024];
+   char buf[100];
+   Edje_File *edf = in_info->edf;
 
    /* Copy Script */
    snprintf(buf, sizeof(buf), "edje/scripts/lua/%i", id);
@@ -1017,7 +793,7 @@ _edje_pick_lua_scripts_add(Edje_File *edf, int id, int new_id)
 
         VERBOSE(EINA_LOG_INFO("Read lua script <%s> data <%p> size <%d>\n",
                        buf, s->data, s->size));
-        context->current_file->luascriptlist = eina_list_append(context->current_file->luascriptlist, s);
+        in_info->luascriptlist = eina_list_append(in_info->luascriptlist, s);
      }
    else
      {
@@ -1051,17 +827,17 @@ _edje_pick_color_class_update(Edje_File *o, Edje_File *edf)
 }
 
 static void
-_edje_pick_images_desc_update(Edje_Part_Description_Image *desc)
+_edje_pick_images_desc_update(Edje_Pick_File_Info *in_info, Edje_Part_Description_Image *desc)
 {
    /* Update all IDs of images in descs */
    if (desc)
      {
         unsigned int k;
         int new_id = (desc->image.set) ?
-           _edje_pick_new_id_get(context->current_file->imagesetlist,
+           _edje_pick_new_id_get(in_info->imagesetlist,
                  desc->image.id,
                  EINA_TRUE) :
-           _edje_pick_new_id_get(context->current_file->imagelist,
+           _edje_pick_new_id_get(in_info->imagelist,
                  desc->image.id,
                  EINA_TRUE);
 
@@ -1070,10 +846,10 @@ _edje_pick_images_desc_update(Edje_Part_Description_Image *desc)
         for (k = 0; k < desc->image.tweens_count; k++)
           {
              new_id = (desc->image.set) ?
-                _edje_pick_new_id_get(context->current_file->imagesetlist,
+                _edje_pick_new_id_get(in_info->imagesetlist,
                       desc->image.tweens[k]->id ,
                       EINA_TRUE) :
-                _edje_pick_new_id_get(context->current_file->imagelist,
+                _edje_pick_new_id_get(in_info->imagelist,
                       desc->image.tweens[k]->id ,
                       EINA_TRUE);
 
@@ -1083,7 +859,7 @@ _edje_pick_images_desc_update(Edje_Part_Description_Image *desc)
 }
 
 static void
-_edje_pick_images_process(Edje_Part_Collection *edc)
+_edje_pick_images_process(Edje_Pick_File_Info *in_info, Edje_Part_Collection *edc)
 {
    /* Find what images are used, update IDs, mark as USED */
    unsigned int i;
@@ -1098,10 +874,10 @@ _edje_pick_images_process(Edje_Part_Collection *edc)
              /* Update IDs of all images in ALL descs of this part */
              unsigned int k;
 
-             _edje_pick_images_desc_update((Edje_Part_Description_Image *) part->default_desc);
+             _edje_pick_images_desc_update(in_info, (Edje_Part_Description_Image *) part->default_desc);
 
              for (k = 0; k < part->other.desc_count; k++)
-               _edje_pick_images_desc_update((Edje_Part_Description_Image *) part->other.desc[k]);
+               _edje_pick_images_desc_update(in_info, (Edje_Part_Description_Image *) part->other.desc[k]);
           }
      }
 }
@@ -1135,13 +911,13 @@ _tone_cmp(const void *d1, const void *d2)
 }
 
 static void
-_edje_pick_program_update(Edje_Program *prog)
+_program_update(Edje_Pick_File_Info *in_info, Edje_Program *prog)
 {
    Edje_Pick_Data *p;
    Edje_Pick_Tone *t;
 
    /* Scan for used samples, update samples IDs */
-   p = eina_list_search_unsorted(context->current_file->samplelist,
+   p = eina_list_search_unsorted(in_info->samplelist,
                                  (Eina_Compare_Cb) _sample_cmp,
                                  prog->sample_name);
 
@@ -1150,7 +926,7 @@ _edje_pick_program_update(Edje_Program *prog)
      p->id.used = EINA_TRUE;
 
    /* handle tones as well */
-   t = eina_list_search_unsorted(context->current_file->tonelist,
+   t = eina_list_search_unsorted(in_info->tonelist,
                                  (Eina_Compare_Cb) _tone_cmp,
                                  prog->tone_name);
 
@@ -1160,39 +936,39 @@ _edje_pick_program_update(Edje_Program *prog)
 }
 
 static int
-_edje_pick_programs_process(Edje_Part_Collection *edc)
+_edje_pick_programs_process(Edje_Pick_File_Info *in_info, Edje_Part_Collection *edc)
 {
    /* This wil mark which samples are used and should be saved */
    unsigned int i;
 
    for(i = 0; i < edc->programs.fnmatch_count; i++)
-     _edje_pick_program_update(edc->programs.fnmatch[i]);
+     _program_update(in_info, edc->programs.fnmatch[i]);
 
    for(i = 0; i < edc->programs.strcmp_count; i++)
-     _edje_pick_program_update(edc->programs.strcmp[i]);
+     _program_update(in_info, edc->programs.strcmp[i]);
 
    for(i = 0; i < edc->programs.strncmp_count; i++)
-     _edje_pick_program_update(edc->programs.strncmp[i]);
+     _program_update(in_info, edc->programs.strncmp[i]);
 
    for(i = 0; i < edc->programs.strrncmp_count; i++)
-     _edje_pick_program_update(edc->programs.strrncmp[i]);
+     _program_update(in_info, edc->programs.strrncmp[i]);
 
    for(i = 0; i < edc->programs.nocmp_count; i++)
-     _edje_pick_program_update(edc->programs.nocmp[i]);
+     _program_update(in_info, edc->programs.nocmp[i]);
 
    return EDJE_PICK_NO_ERROR;
 }
 
 static int
-_edje_pick_collection_process(Edje_Part_Collection *edc)
+_edje_pick_collection_process(Edje_Pick_File_Info *in_info, Edje_Part_Collection *edc)
 {
    /* Update all IDs, NAMES in current collection */
    static int current_collection_id = 0;
 
    edc->id = current_collection_id;
    current_collection_id++;
-   _edje_pick_images_process(edc);
-   _edje_pick_programs_process(edc);
+   _edje_pick_images_process(in_info, edc);
+   _edje_pick_programs_process(in_info, edc);
 
    return EDJE_PICK_NO_ERROR;
 }
@@ -1270,7 +1046,7 @@ _images_list_get(Edje_File *edf)
              Edje_Image_Directory_Entry *img = &edf->image_dir->entries[k];
              if (img->entry)
                {
-                  image_info_ex *ex = calloc(1, sizeof(*ex));
+                  Edje_Pick_Image_Info *ex = calloc(1, sizeof(*ex));
                   ex->name = eina_stringshare_add(img->entry);
                   ex->id = img->id;
                   images = eina_list_append(images, ex);
@@ -1297,7 +1073,7 @@ _samples_list_get(Edje_File *edf)
              Edje_Sound_Sample *sample = &edf->sound_dir->samples[k];
              if (sample->name)
                {
-                  image_info_ex *ex = calloc(1, sizeof(*ex));
+                  Edje_Pick_Image_Info *ex = calloc(1, sizeof(*ex));
                   ex->name = eina_stringshare_add(sample->name);
                   ex->id = sample->id;
                   samples = eina_list_append(samples, ex);
@@ -1330,7 +1106,7 @@ _fonts_list_get(Edje_File *edf)
           {
              if (f->name && f->file)
                {
-                  font_info_ex *st = malloc(sizeof(*st));
+                  Edje_Pick_Font_Info *st = malloc(sizeof(*st));
 
                   st->name = (char *) eina_stringshare_add(f->name);
                   st->file = (char *) eina_stringshare_add(f->file);
@@ -1396,231 +1172,186 @@ edje_pick_file_info_read(const char *file_name,
    return EDJE_PICK_FILE_OPEN_FAILED;
 }
 
-EAPI int
-edje_pick_process(int argc, char **argv)
+EAPI Edje_Pick_Status
+edje_pick_process(Edje_Pick_Session *session)
 {
-   char *name1, *output_filename = NULL;
-   Eina_List *inp_files = NULL;
+   Edje_Pick_File_Info *info;
+   char *group_name, *output_filename = NULL;
    int comp_mode = EET_COMPRESSION_DEFAULT;
-   Edje_File *out_file = NULL;
-   Eina_List *images = NULL;
    Eina_List *samples = NULL;
    Eina_List *tones = NULL;
    Edje_Image_Directory_Set *sets = NULL; /* ALL files sets composed here */
 
    Edje_Part_Collection *edc;
    Edje_Part_Collection_Directory_Entry *ce;
-   Eet_File *ef;
    Edje_Font_List *fl;
-   Eina_List *f, *l;
-   char buf[1024];
-   char *err = NULL;
-   void *n;
-   int k, bytes;
+   Eina_List *itr, *itr2;
+   char buf[100];
+   int bytes;
 
-   k = edje_pick_command_line_parse(argc, argv,
-         &inp_files, &output_filename, EINA_FALSE);
-
-   if ( k != EDJE_PICK_NO_ERROR)
-     {
-        if (err)
-          EINA_LOG_ERR("%s", err);
-
-        return k;
-     }
-
-   _edje_pick_args_show(inp_files, output_filename);
+   _session_print(session);
 
    /* START - Main loop scanning input files */
-   EINA_LIST_FOREACH(inp_files, f, context->current_file)
+   EINA_LIST_FOREACH(session->input_files_infos, itr, info)
      {
-        Edje_File *edf;
+        Eet_File *ef = eet_open(info->name, EET_FILE_MODE_READ);
+        if (!ef) return EDJE_PICK_FAILED_OPEN_INP;
 
-        ef = eet_open(context->current_file->name, EET_FILE_MODE_READ);
-        if (!ef)
-          return _edje_pick_cleanup(inp_files, out_file,
-                EDJE_PICK_FAILED_OPEN_INP, NULL, NULL, NULL, NULL, NULL);
+        info->edf = eet_data_read(ef, _edje_edd_edje_file, "edje/file");
+        if (!info->edf) return EDJE_PICK_FAILED_READ_INP;
 
-        edf = eet_data_read(ef, _edje_edd_edje_file, "edje/file");
-        if (!edf)
-          return _edje_pick_cleanup(inp_files, out_file,
-                EDJE_PICK_FAILED_READ_INP, NULL, NULL, NULL, NULL, NULL);
-
-        context->current_file->edf = edf;
-        edf->ef = ef;
-
-        out_file = _edje_pick_output_prepare(out_file, edf, output_filename);
-
-        k = _edje_pick_header_make(out_file, edf, inp_files);
-        if (k != EDJE_PICK_NO_ERROR)
-          {
-             eet_close(ef);
-             return _edje_pick_cleanup(inp_files, out_file,
-                   k, NULL, NULL, NULL, NULL, NULL);
-          }
+        _session_output_prepare(session, info);
+        Edje_Pick_Status st = _header_make(session, info);
+        if (st != EDJE_PICK_NO_ERROR) return st;
 
         /* Build lists of all images, samples and fonts of input files    */
-        _edje_pick_images_add(edf, out_file);  /* Add Images to imagelist */
-        _edje_pick_sounds_add(edf);  /* Add Sounds to samplelist          */
-        _Edje_Pick_Fonts_add(edf);   /* Add fonts from file to fonts list */
+        _images_add(session, info);  /* Add Images to imagelist */
+        _sounds_add(session, info);  /* Add Sounds to samplelist          */
+        _fonts_add(session, info);   /* Add fonts from file to fonts list */
 
         /* Copy styles, color class */
-        _edje_pick_styles_update(out_file, edf);
-        _edje_pick_color_class_update(out_file, edf);
+        _edje_pick_styles_update(session->output_info.edf, info->edf);
+        _edje_pick_color_class_update(session->output_info.edf, info->edf);
 
         /* Process Groups */
-        EINA_LIST_FOREACH(context->current_file->groups, l , name1)
+        EINA_LIST_FOREACH(info->groups, itr2, group_name)
           {  /* Read group info */
-             ce = eina_hash_find(edf->collection, name1);
+             ce = eina_hash_find(info->edf->collection, group_name);
              if (!ce || (ce->id < 0))
                {
-                  EINA_LOG_ERR("Failed to find group <%s> id\n", name1);
-                  return _edje_pick_cleanup(inp_files, out_file,
-                                            EDJE_PICK_GROUP_NOT_FOUND,
-                                            NULL, NULL, NULL, NULL, NULL);
+                  EINA_LOG_ERR("Failed to find group <%s>'s id\n", group_name);
+                  return EDJE_PICK_GROUP_NOT_FOUND;
                }
 
-             VERBOSE(EINA_LOG_INFO("Copy group: <%s>\n", name1));
+             VERBOSE(EINA_LOG_INFO("Copy group: <%s>\n", group_name));
 
              edje_cache_emp_alloc(ce);
 
              snprintf(buf, sizeof(buf), "edje/collections/%i", ce->id);
              EINA_LOG_INFO("Trying to read group <%s>\n", buf);
-             edc = eet_data_read(edf->ef, _edje_edd_edje_part_collection, buf);
+             edc = eet_data_read(info->edf->ef, _edje_edd_edje_part_collection, buf);
              if (!edc)
                {
-                  EINA_LOG_ERR("Failed to read group <%s> id <%d>\n", name1, ce->id);
-                  return _edje_pick_cleanup(inp_files, out_file,
-                        EDJE_PICK_GROUP_NOT_FOUND,
-                        NULL, NULL, NULL, NULL, NULL);
+                  EINA_LOG_ERR("Failed to read group <%s> id <%d>\n", group_name, ce->id);
+                  return EDJE_PICK_GROUP_NOT_FOUND;
                }
 
              /* Update IDs */
-             _edje_pick_collection_process(edc);
+             _edje_pick_collection_process(info, edc);
 
              /* Build lists of all scripts with new IDs */
-             _edje_pick_scripts_add(edf, ce->id, edc->id);
-             _edje_pick_lua_scripts_add(edf, ce->id, edc->id);
+             _scripts_add(session, info, ce->id, edc->id);
+             _lua_scripts_add(session, info, ce->id, edc->id);
 
              {
                 /* Write the group to output file using new id */
-                snprintf(buf, sizeof(buf),
-                         "edje/collections/%i", edc->id);
-                bytes = eet_data_write(out_file->ef,
+                snprintf(buf, sizeof(buf), "edje/collections/%i", edc->id);
+                bytes = eet_data_write(session->output_ef,
                                        _edje_edd_edje_part_collection,
                                        buf, edc, comp_mode);
-                EINA_LOG_INFO("Wrote <%d> bytes for group <%s>\n", bytes,buf);
+                EINA_LOG_INFO("Wrote <%d> bytes for group <%s>\n", bytes, buf);
              }
 
              free(edc);
              edje_cache_emp_free(ce);
-             eet_close(ef);
           }
 
         /* We SKIP writing source, just can't compose it */
         /* FIXME: use Edje_Edit code to generate source */
      } /* END   - Main loop scanning input files */
 
-   if (context->current_group_id == 0)
+
+   if (session->next_group_id == 0)
      {  /* No groups were fetch from input files - ABORT */
-        return _edje_pick_cleanup(inp_files, out_file,
-              EDJE_PICK_NO_GROUP,
-              NULL, NULL, NULL, NULL, NULL);
+        return EDJE_PICK_NO_GROUP;
      }
 
    /* Write rest of output */
 
-   EINA_LIST_FOREACH(inp_files, f, context->current_file)
+   EINA_LIST_FOREACH(session->input_files_infos, itr, info)
      {
         /* Write Scripts from ALL files */
         Edje_Pick_Data *s;
         Edje_Pick_Tone *tn;
-        Eina_List *t;
 
-        EINA_LIST_FOREACH(context->current_file->scriptlist, t, s)
+        EINA_LIST_FOREACH(info->scriptlist, itr2, s)
           {
              /* Write Scripts */
              snprintf(buf, sizeof(buf),
                       "edje/scripts/embryo/compiled/%i", s->id.new_id);
              VERBOSE(EINA_LOG_INFO("wrote embryo scr <%s> data <%p> size <%d>\n",
                             buf, s->data, s->size));
-             eet_write(out_file->ef, buf, s->data, s->size, comp_mode);
+             eet_write(session->output_ef, buf, s->data, s->size, comp_mode);
           }
 
-        EINA_LIST_FOREACH(context->current_file->luascriptlist, t, s)
+        EINA_LIST_FOREACH(info->luascriptlist, itr2, s)
           {
              /* Write Lua Scripts */
              snprintf(buf, sizeof(buf),
                       "edje/scripts/lua/%i", s->id.new_id);
              VERBOSE(EINA_LOG_INFO("wrote lua scr <%s> data <%p> size <%d>\n",
                             buf, s->data, s->size));
-             eet_write(out_file->ef, buf, s->data, s->size, comp_mode);
+             eet_write(session->output_ef, buf, s->data, s->size, comp_mode);
           }
 
-        EINA_LIST_FOREACH(context->current_file->imagelist, t, s)
+        EINA_LIST_FOREACH(info->imagelist, itr2, s)
           {
-             if (context->current_file->append || s->id.used)
+             if (info->append || s->id.used)
                {
                   snprintf(buf, sizeof(buf), "edje/images/%i", s->id.new_id);
-                  eet_write(out_file->ef, buf, s->data, s->size, EINA_TRUE);
+                  eet_write(session->output_ef, buf, s->data, s->size, EINA_TRUE);
                   VERBOSE(EINA_LOG_INFO("Wrote <%s> image data <%p> size <%d>\n", buf, s->data, s->size));
                }
           }
 
-        EINA_LIST_FOREACH(context->current_file->samplelist, l, s)
+        EINA_LIST_FOREACH(info->samplelist, itr2, s)
           {
-             if (context->current_file->append || s->id.used)
+             if (info->append || s->id.used)
                {  /* Write only used samples */
                   samples = eina_list_append(samples, s->entry);
 
                   snprintf(buf, sizeof(buf), "edje/sounds/%i",
                            s->id.new_id);
-                  eet_write(out_file->ef, buf,
+                  eet_write(session->output_ef, buf,
                             s->data, s->size,EINA_TRUE);
                   VERBOSE(EINA_LOG_INFO("Wrote <%s> sample data <%p> size <%d>\n",
                                  buf, s->data, s->size));
                }
           }
 
-        EINA_LIST_FOREACH(context->current_file->tonelist, l, tn)
+        EINA_LIST_FOREACH(info->tonelist, itr2, tn)
           {
-             if (context->current_file->append || tn->used)
+             if (info->append || tn->used)
                tones = eina_list_append(tones, tn->tone);
           }
      }
 
-   _edje_pick_sound_dir_compose(samples, tones, out_file);
-
-   /* Write file header after processing all groups */
-   if (out_file)
-     {
-        bytes = eet_data_write(out_file->ef, _edje_edd_edje_file, "edje/file",
-                               out_file, comp_mode);
-        VERBOSE(EINA_LOG_INFO("Wrote <%d> bytes for file header.\n", bytes));
-     }
-
-   eina_list_free(images);
+   _edje_pick_sound_dir_compose(samples, tones, session->output_info.edf);
    eina_list_free(samples);
    eina_list_free(tones);
 
+   /* Write file header after processing all groups */
+   bytes = eet_data_write(session->output_ef, _edje_edd_edje_file, "edje/file",
+         session->output_info.edf, comp_mode);
+   VERBOSE(EINA_LOG_INFO("Wrote <%d> bytes for file header.\n", bytes));
+
    fl = calloc(1, sizeof(*fl));
 
-   EINA_LIST_FOREACH(context->fontlist, l, n)
+   Edje_Pick_Font *fnt;
+   EINA_LIST_FOREACH(session->fontlist, itr, fnt)
      {
         /*  Create a font list from used fonts */
-        Edje_Pick_Font *fnt = n;
-        if (context->current_file->append || fnt->used)
+        if (fnt->used)
           fl->list = eina_list_append(fl->list, fnt->f);
      }
 
-   if (out_file)
      {
         /* Write Fonts from all files */
         Eet_Data_Descriptor *_font_list_edd = NULL;
         Eet_Data_Descriptor *_font_edd;
 
         _edje_data_font_list_desc_make(&_font_list_edd, &_font_edd);
-        bytes = eet_data_write(out_file->ef, _font_list_edd,
+        bytes = eet_data_write(session->output_ef, _font_list_edd,
                                "edje_source_fontmap", fl, comp_mode);
         VERBOSE(EINA_LOG_INFO("Wrote <%d> bytes for fontmap.\n", bytes));
 
@@ -1630,14 +1361,12 @@ edje_pick_process(int argc, char **argv)
 
    free(fl);
 
-   if (sets)
-     free(sets);
+   if (sets) free(sets);
 
    if (output_filename)
      printf("Wrote <%s> output file.\n", output_filename);
 
-   return _edje_pick_cleanup(inp_files, out_file, EDJE_PICK_NO_ERROR,
-         NULL, NULL, NULL, NULL, NULL);
+   return EDJE_PICK_NO_ERROR;
 }
 
 typedef void (*_finish_cb)();
