@@ -1,4 +1,6 @@
 #include "Edje_Pick.h"
+#include <Ecore_Getopt.h>
+#include <Ecore.h>
 
 #define EDJE_PICK_HELP_STRING \
 "\nEdje Pick - the \"edj\" merging tool.\n\
@@ -27,16 +29,18 @@ Replacing the button and check with widgets taken from default theme.\n\
 (Given that theme1.edj button, check group-name are as in default.edj)\n"
 
 static Edje_Pick_Status
-_args_parse_into_session(int argc, char **argv, Edje_Pick_Session)
+_args_parse_into_session(int argc, char **argv, Edje_Pick_Session *session)
 {  /* On return ifs is Input Files List, ofn is Output File Name */
    Eina_List *gpf = NULL; /* List including counters of groups-per-file */
    Eina_List *a_files = NULL;
    Eina_List *i_files = NULL;
    Eina_List *groups = NULL;
    Eina_List *itr, *itr2, *cg;
+   Eina_Bool verbose = EINA_FALSE;
    char *output_filename = NULL;
    int *c = NULL;
    int k;
+   const char *str;
    Eina_Bool show_help = EINA_FALSE;
    Edje_Pick_Status status = EDJE_PICK_NO_ERROR;
 
@@ -69,7 +73,7 @@ _args_parse_into_session(int argc, char **argv, Edje_Pick_Session)
    };
 
    Ecore_Getopt_Value values[] = {
-        ECORE_GETOPT_VALUE_BOOL(context->v),
+        ECORE_GETOPT_VALUE_BOOL(verbose),
         ECORE_GETOPT_VALUE_STR(output_filename),
         ECORE_GETOPT_VALUE_LIST(a_files),
         ECORE_GETOPT_VALUE_LIST(i_files),
@@ -116,8 +120,11 @@ _args_parse_into_session(int argc, char **argv, Edje_Pick_Session)
         goto end;
      }
 
-   if (context->v)  /* Changed to INFO if verbose */
-     eina_log_level_set(EINA_LOG_LEVEL_INFO);
+   if (verbose)  /* Changed to INFO if verbose */
+     {
+        eina_log_level_set(EINA_LOG_LEVEL_INFO);
+     }
+   edje_pick_session_verbose_set(session, verbose);
 
    EINA_LIST_FOREACH(a_files, itr, str)
       edje_pick_input_file_add(session, str);
@@ -126,7 +133,7 @@ _args_parse_into_session(int argc, char **argv, Edje_Pick_Session)
    cg = groups;
    EINA_LIST_FOREACH(i_files, itr, str)
      {  /* Now match groups from groups-list with included files */
-        c = eina_list_data_get(ll);
+        c = eina_list_data_get(itr2);
         if (c)
           {
              while(*c)
@@ -143,6 +150,7 @@ _args_parse_into_session(int argc, char **argv, Edje_Pick_Session)
         itr2 = eina_list_next(itr2);
      }
 
+   edje_pick_output_file_add(session, output_filename);
 end:
    EINA_LIST_FREE(gpf, c)
       free(c);
@@ -169,9 +177,9 @@ main(int argc, char **argv)
    eina_log_level_set(EINA_LOG_LEVEL_WARN);  /* Changed to INFO if verbose */
 
    _args_parse_into_session(argc, argv, session);
-   status = edje_pick_process(session);
+   int status = edje_pick_process(session);
 
-   edje_pick_context_free(context);
+   edje_pick_session_del(session);
    edje_pick_shutdown();
    return status;
 }

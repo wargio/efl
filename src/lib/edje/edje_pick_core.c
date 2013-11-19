@@ -58,7 +58,6 @@ struct _Edje_Pick_Session
    Eina_Bool v; /* Verbose */
    Eina_List *input_files_infos; /* List of Edje_Pick_File_Info * */
    Edje_Pick_File_Info output_info;
-   Eet_File *output_ef;
    Eina_List *fontlist;
    Eina_Hash *groups_hash;
    int next_group_id;
@@ -257,7 +256,6 @@ edje_pick_group_add(Edje_Pick_Session *session, const char *in_file, const char 
    if (!in_info)
      {
         in_info = calloc(1, sizeof(*in_info));
-        in_info->append = EINA_TRUE;
         in_info->name = in_str;
         session->input_files_infos = eina_list_append(session->input_files_infos, in_info);
      }
@@ -1200,6 +1198,7 @@ edje_pick_process(Edje_Pick_Session *session)
         info->edf = eet_data_read(ef, _edje_edd_edje_file, "edje/file");
         if (!info->edf) return EDJE_PICK_FAILED_READ_INP;
 
+        info->edf->ef = ef;
         _session_output_prepare(session, info);
         Edje_Pick_Status st = _header_make(session, info);
         if (st != EDJE_PICK_NO_ERROR) return st;
@@ -1246,7 +1245,7 @@ edje_pick_process(Edje_Pick_Session *session)
              {
                 /* Write the group to output file using new id */
                 snprintf(buf, sizeof(buf), "edje/collections/%i", edc->id);
-                bytes = eet_data_write(session->output_ef,
+                bytes = eet_data_write(session->output_info.edf->ef,
                                        _edje_edd_edje_part_collection,
                                        buf, edc, comp_mode);
                 EINA_LOG_INFO("Wrote <%d> bytes for group <%s>\n", bytes, buf);
@@ -1256,6 +1255,8 @@ edje_pick_process(Edje_Pick_Session *session)
              edje_cache_emp_free(ce);
           }
 
+        eet_close(ef);
+        info->edf->ef = NULL;
         /* We SKIP writing source, just can't compose it */
         /* FIXME: use Edje_Edit code to generate source */
      } /* END   - Main loop scanning input files */
@@ -1281,7 +1282,7 @@ edje_pick_process(Edje_Pick_Session *session)
                       "edje/scripts/embryo/compiled/%i", s->id.new_id);
              VERBOSE(EINA_LOG_INFO("wrote embryo scr <%s> data <%p> size <%d>\n",
                             buf, s->data, s->size));
-             eet_write(session->output_ef, buf, s->data, s->size, comp_mode);
+             eet_write(session->output_info.edf->ef, buf, s->data, s->size, comp_mode);
           }
 
         EINA_LIST_FOREACH(info->luascriptlist, itr2, s)
@@ -1291,7 +1292,7 @@ edje_pick_process(Edje_Pick_Session *session)
                       "edje/scripts/lua/%i", s->id.new_id);
              VERBOSE(EINA_LOG_INFO("wrote lua scr <%s> data <%p> size <%d>\n",
                             buf, s->data, s->size));
-             eet_write(session->output_ef, buf, s->data, s->size, comp_mode);
+             eet_write(session->output_info.edf->ef, buf, s->data, s->size, comp_mode);
           }
 
         EINA_LIST_FOREACH(info->imagelist, itr2, s)
@@ -1299,7 +1300,7 @@ edje_pick_process(Edje_Pick_Session *session)
              if (info->append || s->id.used)
                {
                   snprintf(buf, sizeof(buf), "edje/images/%i", s->id.new_id);
-                  eet_write(session->output_ef, buf, s->data, s->size, EINA_TRUE);
+                  eet_write(session->output_info.edf->ef, buf, s->data, s->size, EINA_TRUE);
                   VERBOSE(EINA_LOG_INFO("Wrote <%s> image data <%p> size <%d>\n", buf, s->data, s->size));
                }
           }
@@ -1312,7 +1313,7 @@ edje_pick_process(Edje_Pick_Session *session)
 
                   snprintf(buf, sizeof(buf), "edje/sounds/%i",
                            s->id.new_id);
-                  eet_write(session->output_ef, buf,
+                  eet_write(session->output_info.edf->ef, buf,
                             s->data, s->size,EINA_TRUE);
                   VERBOSE(EINA_LOG_INFO("Wrote <%s> sample data <%p> size <%d>\n",
                                  buf, s->data, s->size));
@@ -1331,7 +1332,7 @@ edje_pick_process(Edje_Pick_Session *session)
    eina_list_free(tones);
 
    /* Write file header after processing all groups */
-   bytes = eet_data_write(session->output_ef, _edje_edd_edje_file, "edje/file",
+   bytes = eet_data_write(session->output_info.edf->ef, _edje_edd_edje_file, "edje/file",
          session->output_info.edf, comp_mode);
    VERBOSE(EINA_LOG_INFO("Wrote <%d> bytes for file header.\n", bytes));
 
@@ -1351,7 +1352,7 @@ edje_pick_process(Edje_Pick_Session *session)
         Eet_Data_Descriptor *_font_edd;
 
         _edje_data_font_list_desc_make(&_font_list_edd, &_font_edd);
-        bytes = eet_data_write(session->output_ef, _font_list_edd,
+        bytes = eet_data_write(session->output_info.edf->ef, _font_list_edd,
                                "edje_source_fontmap", fl, comp_mode);
         VERBOSE(EINA_LOG_INFO("Wrote <%d> bytes for fontmap.\n", bytes));
 
@@ -1367,6 +1368,12 @@ edje_pick_process(Edje_Pick_Session *session)
      printf("Wrote <%s> output file.\n", output_filename);
 
    return EDJE_PICK_NO_ERROR;
+}
+
+EAPI void
+edje_pick_session_verbose_set(Edje_Pick_Session *session, Eina_Bool verbose)
+{
+   if (session) session->v = verbose;
 }
 
 typedef void (*_finish_cb)();

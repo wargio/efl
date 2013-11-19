@@ -78,6 +78,8 @@ EAPI Eina_Bool edje_pick_output_file_add(Edje_Pick_Session *session, const char 
 
 EAPI Edje_Pick_Status edje_pick_process(Edje_Pick_Session *session);
 
+EAPI void edje_pick_session_verbose_set(Edje_Pick_Session *session, Eina_Bool verbose);
+
 /* FIXME Daniel: really needed here? parameters order to change (id->name, data, size, ...) */
 EAPI Eina_Bool edje_pick_sample_play(void *data, const char *id, size_t size, const double speed, void *finish (void));
 #endif
