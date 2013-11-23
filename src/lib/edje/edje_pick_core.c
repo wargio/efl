@@ -226,6 +226,7 @@ edje_pick_input_file_add(Edje_Pick_Session *session, const char *name)
 EAPI Eina_Bool
 edje_pick_output_file_add(Edje_Pick_Session *session, const char *name)
 {
+   eina_stringshare_del(session->output_info.name);
    session->output_info.name = eina_stringshare_add(name);
    return EINA_TRUE;
 }
