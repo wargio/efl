@@ -64,8 +64,10 @@ typedef enum _Edje_Pick_Status Edje_Pick_Status;
 
 EAPI void edje_pick_init(void);
 EAPI void edje_pick_shutdown(void);
+
 EAPI Edje_Pick_Session *edje_pick_session_new();
 EAPI void edje_pick_session_del(Edje_Pick_Session *session);
+EAPI Edje_Pick_Session *edje_pick_session_copy(const Edje_Pick_Session *session);
 
 EAPI const char *edje_pick_error_get_as_string(Edje_Pick_Status s);
 
@@ -73,8 +75,10 @@ EAPI const char *edje_pick_error_get_as_string(Edje_Pick_Status s);
 EAPI int edje_pick_file_info_read(const char *file_name, Eina_List **groups, Eina_List **images, Eina_List **samples, Eina_List **fonts);
 
 EAPI Eina_Bool edje_pick_group_add(Edje_Pick_Session *session, const char *in_file, const char *in_group);
+EAPI Eina_Bool edje_pick_group_remove(Edje_Pick_Session *session, const char *in_group);
 EAPI Eina_Bool edje_pick_input_file_add(Edje_Pick_Session *session, const char *in_file);
-EAPI Eina_Bool edje_pick_output_file_add(Edje_Pick_Session *session, const char *out_file);
+EAPI Eina_Bool edje_pick_input_file_remove(Edje_Pick_Session *session, const char *in_file);
+EAPI Eina_Bool edje_pick_output_file_set(Edje_Pick_Session *session, const char *out_file);
 
 EAPI Edje_Pick_Status edje_pick_process(Edje_Pick_Session *session);
 

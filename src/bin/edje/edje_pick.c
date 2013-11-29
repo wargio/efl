@@ -150,7 +150,7 @@ _args_parse_into_session(int argc, char **argv, Edje_Pick_Session *session)
         itr2 = eina_list_next(itr2);
      }
 
-   edje_pick_output_file_add(session, output_filename);
+   edje_pick_output_file_set(session, output_filename);
 end:
    EINA_LIST_FREE(gpf, c)
       free(c);

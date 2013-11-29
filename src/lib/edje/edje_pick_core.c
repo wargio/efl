@@ -1,6 +1,8 @@
 #include "Edje_Pick.h"
 #include "edje_private.h"
 
+#define SAFE_FREE(_h, _fn) do { if (_h) { _fn((void*)_h); _h = NULL; } } while (0)
+
 static unsigned char *init_count = 0;
 
 struct _Edje_Pick_Id
@@ -13,7 +15,7 @@ typedef struct _Edje_Pick_Id Edje_Pick_Id;
 
 struct _Edje_Pick_File_Info
 {
-   const char *name;
+   Eina_Stringshare *name;
    Eina_List *groups;
    Edje_File *edf;     /* Keeps all file data after reading  */
    Eina_Bool append;   /* Take everything from this file */
@@ -30,7 +32,7 @@ typedef struct _Edje_Pick_File_Info Edje_Pick_File_Info;
 
 struct _Edje_Pick_Data
 {
-   const char *filename;  /* Image, Sample File Name       */
+   Eina_Stringshare *filename;  /* Image, Sample File Name       */
    void *entry ;          /* used to build output file dir FIXME: REMOVE THIS */
    void *data;            /* Data as taken from input file */
 
@@ -107,6 +109,30 @@ edje_pick_session_new()
    return session;
 }
 
+EAPI Edje_Pick_Session *
+edje_pick_session_copy(const Edje_Pick_Session *session)
+{
+   Edje_Pick_Session *copy = edje_pick_session_new();
+   if (!copy) return NULL;
+
+   copy->v = session->v;
+
+   Edje_Pick_File_Info *file_info;
+   Eina_List *itr_file;
+   EINA_LIST_FOREACH(session->input_files_infos, itr_file, file_info)
+     {
+        if (file_info->append) edje_pick_input_file_add(copy, file_info->name);
+        else
+          {
+             Eina_List *itr_grp;
+             Eina_Stringshare *group_name;
+             EINA_LIST_FOREACH(file_info->groups, itr_grp, group_name)
+                edje_pick_group_add(copy, file_info->name, group_name);
+          }
+     }
+   return copy;
+}
+
 static void
 _edje_pick_data_free(Eina_List *l)
 {
@@ -165,6 +191,28 @@ _edje_pick_out_file_free(Edje_File *out_file)
      }
 }
 
+static void
+_file_info_del(Edje_Pick_File_Info *info)
+{
+   SAFE_FREE(info->name, eina_stringshare_del);
+
+   char *name;
+   EINA_LIST_FREE(info->groups, name)
+      eina_stringshare_del(name);
+
+   SAFE_FREE(info->scriptlist, _edje_pick_data_free);
+   SAFE_FREE(info->luascriptlist, _edje_pick_data_free);
+   SAFE_FREE(info->imagelist, _edje_pick_data_free);
+   SAFE_FREE(info->imagesetlist, _edje_pick_data_free);
+   SAFE_FREE(info->samplelist, _edje_pick_data_free);
+
+   EINA_LIST_FREE(info->tonelist, name) free(name);
+
+   SAFE_FREE(info->edf, _edje_cache_file_unref);
+
+   free(info);
+}
+
 EAPI void
 edje_pick_session_del(Edje_Pick_Session *session)
 {
@@ -172,33 +220,7 @@ edje_pick_session_del(Edje_Pick_Session *session)
    _edje_pick_out_file_free(session->output_info.edf);
 
    EINA_LIST_FREE(session->input_files_infos, info)
-     {
-        char *name;
-        EINA_LIST_FREE(info->groups, name)
-          eina_stringshare_del(name);
-
-        _edje_pick_data_free(info->scriptlist);
-        info->scriptlist = NULL;
-
-        _edje_pick_data_free(info->luascriptlist);
-        info->luascriptlist = NULL;
-
-        _edje_pick_data_free(info->imagelist);
-        info->imagelist = NULL;
-
-        _edje_pick_data_free(info->imagesetlist);
-        info->imagesetlist = NULL;
-
-        _edje_pick_data_free(info->samplelist);
-
-        EINA_LIST_FREE(info->tonelist, name)
-          free(name);
-
-        if (info->edf)
-          _edje_cache_file_unref(info->edf);
-
-        free(info);
-     }
+      _file_info_del(info);
 
    Edje_Pick_Font *ft;
    EINA_LIST_FREE(session->fontlist, ft)
@@ -223,17 +245,36 @@ edje_pick_input_file_add(Edje_Pick_Session *session, const char *name)
    return EINA_TRUE;
 }
 
-EAPI Eina_Bool
-edje_pick_output_file_add(Edje_Pick_Session *session, const char *name)
+static int
+_file_info_cmp_by_name(const void *info, const void *file_name)
 {
-   eina_stringshare_del(session->output_info.name);
-   session->output_info.name = eina_stringshare_add(name);
+   return (file_name != ((Edje_Pick_File_Info *)info)->name);
+}
+
+EAPI Eina_Bool
+edje_pick_input_file_remove(Edje_Pick_Session *session, const char *name)
+{
+   Eina_Stringshare *share_name = eina_stringshare_add(name);
+   Edje_Pick_File_Info *info = eina_list_search_unsorted(
+         session->input_files_infos,
+         _file_info_cmp_by_name, share_name);
+   SAFE_FREE(share_name, eina_stringshare_del);
+   _file_info_del(info);
+   session->input_files_infos = eina_list_remove(session->input_files_infos, info);
+   return EINA_TRUE;
+}
+
+EAPI Eina_Bool
+edje_pick_output_file_set(Edje_Pick_Session *session, const char *name)
+{
+   SAFE_FREE(session->output_info.name, eina_stringshare_del);
+   if (name) session->output_info.name = eina_stringshare_add(name);
    return EINA_TRUE;
 }
 
 /* Look for group name in all input files that are not d1 */
 static Eina_Bool
-_is_group_already_present(Edje_Pick_Session *session, const char *group_name)
+_is_group_already_present(Edje_Pick_Session *session, Eina_Stringshare *group_name)
 {
    return !!eina_hash_find(session->groups_hash, group_name);
 }
@@ -241,27 +282,44 @@ _is_group_already_present(Edje_Pick_Session *session, const char *group_name)
 EAPI Eina_Bool
 edje_pick_group_add(Edje_Pick_Session *session, const char *in_file, const char *in_group)
 {
-   Eina_List *itr;
-   Edje_Pick_File_Info *info, *in_info = NULL;
-   const char *in_str = eina_stringshare_add(in_file);
-   if (_is_group_already_present(session, in_group))
-      return EINA_FALSE;
-   EINA_LIST_FOREACH(session->input_files_infos, itr, info)
+   Eina_Stringshare *share_group = eina_stringshare_add(in_group);
+   if (_is_group_already_present(session, share_group))
      {
-        if (!strcmp(info->name, in_str))
-          {
-             in_info = info;
-             break;
-          }
+        eina_stringshare_del(share_group);
+        return EINA_FALSE;
      }
+   Eina_Stringshare *share_file = eina_stringshare_add(in_file);
+   Edje_Pick_File_Info *in_info = eina_list_search_unsorted(
+         session->input_files_infos,
+         _file_info_cmp_by_name, share_file);
    if (!in_info)
      {
         in_info = calloc(1, sizeof(*in_info));
-        in_info->name = in_str;
+        in_info->name = share_file;
         session->input_files_infos = eina_list_append(session->input_files_infos, in_info);
      }
-   in_info->groups = eina_list_append(in_info->groups, eina_stringshare_add(in_group));
-   eina_hash_add(session->groups_hash, in_group, &itr); // the data is not important, just not NULL
+   else
+      SAFE_FREE(share_file, eina_stringshare_del);
+   in_info->groups = eina_list_append(in_info->groups, share_group);
+   eina_hash_add(session->groups_hash, share_group, in_info); // the data is not important, just not NULL
+   return EINA_TRUE;
+}
+
+EAPI Eina_Bool
+edje_pick_group_remove(Edje_Pick_Session *session, const char *in_group)
+{
+   Eina_Stringshare *share_group = eina_stringshare_add(in_group);
+   Edje_Pick_File_Info *in_file_info = eina_hash_find(session->groups_hash, share_group);
+   if (!in_file_info)
+     {
+        eina_stringshare_del(share_group);
+        return EINA_FALSE;
+     }
+   in_file_info->groups = eina_list_remove(in_file_info->groups, share_group);
+   eina_hash_del_by_key(session->groups_hash, share_group);
+   eina_stringshare_del(share_group); // remove the reference inside the file_info
+   SAFE_FREE(share_group, eina_stringshare_del); // remove the local reference
+   if (!in_file_info->groups) _file_info_del(in_file_info);
    return EINA_TRUE;
 }
 
@@ -272,7 +330,7 @@ _session_print(const Edje_Pick_Session *session)
    Eina_List *itr;
    char *group_name;
 
-   EINA_LOG_INFO("Got infos for <%d> input files.\n", eina_list_count(session->input_files_infos));
+   printf("Got infos for <%d> input files.\n", eina_list_count(session->input_files_infos));
 
    EINA_LIST_FOREACH(session->input_files_infos, itr, info)
      {
@@ -287,7 +345,7 @@ _session_print(const Edje_Pick_Session *session)
           }
      }
 
-   EINA_LOG_INFO("\nOutput file name was <%s>\n", session->output_info.name);
+   printf("\nOutput file name was <%s>\n", session->output_info.name);
 }
 
 EAPI const char *
@@ -395,6 +453,18 @@ _session_output_prepare(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info
      }
 
    _edje_pick_external_dir_update(o, edf);
+}
+
+static void
+_session_output_finish(Edje_Pick_Session *session)
+{
+   Edje_File *o = session->output_info.edf;
+   /* Allocate and prepare header memory buffer */
+   if (o)
+     {
+        eet_close(session->output_info.edf->ef);
+        SAFE_FREE(session->output_info.edf, free);
+     }
 }
 
 static Edje_Pick_Status
@@ -769,7 +839,7 @@ _scripts_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info, int id, i
    return EDJE_PICK_NO_ERROR;
 }
 
-static Edje_Pick_Status
+static Eina_List *
 _lua_scripts_add(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info, int id, int new_id)
 {
    int size;
@@ -1368,6 +1438,7 @@ edje_pick_process(Edje_Pick_Session *session)
    if (output_filename)
      printf("Wrote <%s> output file.\n", output_filename);
 
+   _session_output_finish(session);
    return EDJE_PICK_NO_ERROR;
 }
 
