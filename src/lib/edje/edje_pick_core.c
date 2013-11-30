@@ -115,6 +115,7 @@ edje_pick_session_copy(const Edje_Pick_Session *session)
    Edje_Pick_Session *copy = edje_pick_session_new();
    if (!copy) return NULL;
 
+   if (!session) return copy;
    copy->v = session->v;
 
    Edje_Pick_File_Info *file_info;
