@@ -76,6 +76,7 @@ EAPI int edje_pick_file_info_read(const char *file_name, Eina_List **groups, Ein
 
 EAPI Eina_Bool edje_pick_group_add(Edje_Pick_Session *session, const char *in_file, const char *in_group);
 EAPI Eina_Bool edje_pick_group_remove(Edje_Pick_Session *session, const char *in_group);
+EAPI Eina_Bool edje_pick_group_exists(Edje_Pick_Session *session, const char *in_file, const char *in_group);
 EAPI Eina_Bool edje_pick_input_file_add(Edje_Pick_Session *session, const char *in_file);
 EAPI Eina_Bool edje_pick_input_file_remove(Edje_Pick_Session *session, const char *in_file);
 EAPI Eina_Bool edje_pick_output_file_set(Edje_Pick_Session *session, const char *out_file);

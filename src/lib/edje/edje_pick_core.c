@@ -324,6 +324,22 @@ edje_pick_group_remove(Edje_Pick_Session *session, const char *in_group)
    return EINA_TRUE;
 }
 
+EAPI Eina_Bool
+edje_pick_group_exists(Edje_Pick_Session *session, const char *in_file, const char *in_group)
+{
+   if (!session) return EINA_FALSE;
+   Eina_Stringshare *share_group = eina_stringshare_add(in_group);
+   Edje_Pick_File_Info *in_file_info = eina_hash_find(session->groups_hash, share_group);
+   eina_stringshare_del(share_group);
+   if (!in_file_info) return EINA_FALSE;
+
+   Eina_Stringshare *share_file = eina_stringshare_add(in_file);
+   Eina_Bool result = (in_file_info->name == share_file);
+   SAFE_FREE(share_file, eina_stringshare_del);
+
+   return result;
+}
+
 static void
 _session_print(const Edje_Pick_Session *session)
 {  /* Print command-line arguments after parsing phase */
