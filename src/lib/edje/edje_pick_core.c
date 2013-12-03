@@ -320,7 +320,11 @@ edje_pick_group_remove(Edje_Pick_Session *session, const char *in_group)
    eina_hash_del_by_key(session->groups_hash, share_group);
    eina_stringshare_del(share_group); // remove the reference inside the file_info
    SAFE_FREE(share_group, eina_stringshare_del); // remove the local reference
-   if (!in_file_info->groups) _file_info_del(in_file_info);
+   if (!in_file_info->groups)
+     {
+        _file_info_del(in_file_info);
+        session->input_files_infos = eina_list_remove(session->input_files_infos, in_file_info);
+     }
    return EINA_TRUE;
 }
 
