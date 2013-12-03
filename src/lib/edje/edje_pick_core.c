@@ -433,16 +433,16 @@ _edje_pick_external_dir_update(Edje_File *o, Edje_File *edf)
 static void
 _session_output_prepare(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info)
 {
-   Edje_File *edf = in_info->edf;
+   Edje_File *edf = (in_info?in_info->edf:NULL);
    Edje_File *o = session->output_info.edf;
    /* Allocate and prepare header memory buffer */
    if (!o)
      {
         o = calloc(1, sizeof(Edje_File));
         o->compiler = eina_stringshare_add("edje_cc");
-        o->version = edf->version;
-        o->minor = edf->minor;
-        o->feature_ver = edf->feature_ver;
+        o->version = (edf?edf->version:0);
+        o->minor = (edf?edf->minor:0);
+        o->feature_ver = (edf?edf->feature_ver:0);
         o->collection = eina_hash_string_small_new(NULL);
 
         /* Open output file */
@@ -473,19 +473,7 @@ _session_output_prepare(Edje_Pick_Session *session, Edje_Pick_File_Info *in_info
           }
      }
 
-   _edje_pick_external_dir_update(o, edf);
-}
-
-static void
-_session_output_finish(Edje_Pick_Session *session)
-{
-   Edje_File *o = session->output_info.edf;
-   /* Allocate and prepare header memory buffer */
-   if (o)
-     {
-        eet_close(session->output_info.edf->ef);
-        SAFE_FREE(session->output_info.edf, free);
-     }
+   if (edf) _edje_pick_external_dir_update(o, edf);
 }
 
 static Edje_Pick_Status
@@ -1280,6 +1268,7 @@ edje_pick_process(Edje_Pick_Session *session)
    int bytes;
 
    _session_print(session);
+   _session_output_prepare(session, NULL);
 
    /* START - Main loop scanning input files */
    EINA_LIST_FOREACH(session->input_files_infos, itr, info)
@@ -1353,11 +1342,6 @@ edje_pick_process(Edje_Pick_Session *session)
         /* FIXME: use Edje_Edit code to generate source */
      } /* END   - Main loop scanning input files */
 
-
-   if (session->next_group_id == 0)
-     {  /* No groups were fetch from input files - ABORT */
-        return EDJE_PICK_NO_GROUP;
-     }
 
    /* Write rest of output */
 
@@ -1459,7 +1443,11 @@ edje_pick_process(Edje_Pick_Session *session)
    if (output_filename)
      printf("Wrote <%s> output file.\n", output_filename);
 
-   _session_output_finish(session);
+   if (session->output_info.edf)
+     {
+        eet_close(session->output_info.edf->ef);
+        SAFE_FREE(session->output_info.edf, free);
+     }
    return EDJE_PICK_NO_ERROR;
 }
 
