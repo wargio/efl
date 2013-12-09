@@ -2,7 +2,8 @@
 # include <config.h>
 #endif
 
-#include <Cocoa/Cocoa.h>
+#import <Cocoa/Cocoa.h>
+#import "ecore_cocoa_window.h"
 
 #include <Eina.h>
 
@@ -62,6 +63,7 @@ ecore_cocoa_shutdown(void)
 EAPI void
 ecore_cocoa_feed_events(void)
 {
+   Ecore_Event *ev;
    NSDate *date = [NSDate dateWithTimeIntervalSinceNow:0.001];
    NSEvent *event = [NSApp nextEventMatchingMask:NSAnyEventMask
                                        untilDate:date
@@ -72,6 +74,7 @@ ecore_cocoa_feed_events(void)
 
    unsigned int time = (unsigned int)((unsigned long long)(ecore_time_get() * 1000.0) & 0xffffffff);
 
+   printf("event cocoa feed\n");
    switch([event type])
    {
       case NSMouseMoved:
@@ -81,12 +84,21 @@ ecore_cocoa_feed_events(void)
       {
          Ecore_Event_Mouse_Move * ev = calloc(1, sizeof(Ecore_Event_Mouse_Move));
          if (!ev) return;
-         ev->x = [event locationInWindow].x;
-         ev->y = [event locationInWindow].y;
+
+         EcoreCocoaWindow *window = (EcoreCocoaWindow *)[event window];
+         NSView *view = [window contentView];
+         NSPoint pt = [event locationInWindow];
+
+         printf("Mouse Move %f %f\n",
+                pt.x, [view frame].size.height - pt.y);
+
+         ev->x = pt.x;
+         ev->y = [view frame].size.height - pt.y;
          ev->root.x = ev->x;
          ev->root.y = ev->y;
          ev->timestamp = time;
-         ev->window = [event window];
+         ev->window = window.ecore_window_data;
+         ev->event_window = ev->window;
          ev->modifiers = 0; /* FIXME: keep modifier around. */
 
          ecore_event_add(ECORE_EVENT_MOUSE_MOVE, ev, NULL, NULL);
@@ -100,12 +112,22 @@ ecore_cocoa_feed_events(void)
       {
          Ecore_Event_Mouse_Button * ev = calloc(1, sizeof(Ecore_Event_Mouse_Button));
          if (!ev) return;
-         ev->x = [event locationInWindow].x;
-         ev->y = [event locationInWindow].y;
+
+         EcoreCocoaWindow *window = (EcoreCocoaWindow *)[event window];
+         NSView *view = [window contentView];
+         NSPoint pt = [event locationInWindow];
+
+         printf("Mouse Down %f %f\n",
+                pt.x, [view frame].size.height - pt.y);
+
+         ev->x = pt.x;
+         ev->y = [view frame].size.height - pt.y;
          ev->root.x = ev->x;
          ev->root.y = ev->y;
          ev->timestamp = time;
          ev->buttons = [event buttonNumber] + 1; // Apple indexes buttons from 0
+         ev->window = window.ecore_window_data;
+         ev->event_window = ev->window;
 
          if ([event clickCount] == 2)
             ev->double_click = 1;
@@ -128,12 +150,22 @@ ecore_cocoa_feed_events(void)
       {
          Ecore_Event_Mouse_Button * ev = calloc(1, sizeof(Ecore_Event_Mouse_Button));
          if (!ev) return;
-         ev->x = [event locationInWindow].x;
-         ev->y = [event locationInWindow].y;
+
+         EcoreCocoaWindow *window = (EcoreCocoaWindow *)[event window];
+         NSView *view = [window contentView];
+         NSPoint pt = [event locationInWindow];
+
+         printf("Mouse UP %f %f\n",
+                pt.x, [view frame].size.height - pt.y);
+         
+         ev->x = pt.x;
+         ev->y = [view frame].size.height - pt.y;
          ev->root.x = ev->x;
          ev->root.y = ev->y;
          ev->timestamp = time;
          ev->buttons = [event buttonNumber] + 1; // Apple indexes buttons from 0
+         ev->window = window.ecore_window_data;
+         ev->event_window = ev->window;
 
          if ([event clickCount] == 2)
             ev->double_click = 1;
@@ -154,6 +186,8 @@ ecore_cocoa_feed_events(void)
       {
          Ecore_Event_Key *ev;
          unsigned int     i;
+         
+         printf("Key Down\n");
 
          ev = calloc(1, sizeof (Ecore_Event_Key));
          if (!ev) return;
@@ -177,6 +211,8 @@ ecore_cocoa_feed_events(void)
       {
          Ecore_Event_Key *ev;
          unsigned int     i;
+         
+         printf("Key Up\n");
 
          ev = calloc(1, sizeof (Ecore_Event_Key));
          if (!ev) return;
@@ -270,6 +306,7 @@ ecore_cocoa_feed_events(void)
       }
       case NSScrollWheel:
       {
+         printf("Scroll Wheel\n");
          break;
       }
       default:
@@ -280,4 +317,13 @@ ecore_cocoa_feed_events(void)
    }
 
    [event release];
+}
+
+EAPI void
+ecore_cocoa_screen_size_get(Ecore_Cocoa_Screen *screen, int *w, int *h)
+{
+   NSSize pt =  [[[NSScreen screens] objectAtIndex:0] frame].size;
+
+   if (w) *w = (int)pt.width;
+   if (h) *h = (int)pt.height;
 }

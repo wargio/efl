@@ -194,12 +194,13 @@ _tex_2d(Evas_Engine_GL_Context *gc, int intfmt, int w, int h, int fmt, int type)
 //   if (glGetTexLevelParameteriv) // in case of weak symbols?
      {
         int intfmtret = -1;
-        
+
         glGetTexLevelParameteriv(GL_TEXTURE_2D, 0,
                                  GL_TEXTURE_INTERNAL_FORMAT, &intfmtret);
         if (!_evas_gl_texture_match(intfmt, intfmtret))
           {
              ERR("Fail tex alloc %ix%i", w, h);
+             printf("intfmt: %X  intfmtret: %X\n", intfmt, intfmtret);
              //        XXX send async err to evas
              return EINA_FALSE;
           }
@@ -473,6 +474,7 @@ _pool_tex_render_new(Evas_Engine_GL_Context *gc, int w, int h, int intformat, in
 # endif
 #endif
    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fnum);
+   GLERR(__FUNCTION__, __FILE__, __LINE__, "");
    glGenTextures(1, &(pt->texture));
    GLERR(__FUNCTION__, __FILE__, __LINE__, "");
    glBindTexture(GL_TEXTURE_2D, pt->texture);
