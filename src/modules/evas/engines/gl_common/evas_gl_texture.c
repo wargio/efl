@@ -190,6 +190,7 @@ _tex_2d(Evas_Engine_GL_Context *gc, int intfmt, int w, int h, int fmt, int type)
 #ifdef GL_TEXTURE_INTERNAL_FORMAT
 # ifdef GL_GLES
 # else   
+#if 0
 // this is not in opengles!!! hrrrm   
 //   if (glGetTexLevelParameteriv) // in case of weak symbols?
      {
@@ -205,6 +206,7 @@ _tex_2d(Evas_Engine_GL_Context *gc, int intfmt, int w, int h, int fmt, int type)
              return EINA_FALSE;
           }
      }
+#endif
 //   else
 //     {
 //        ERR("GL_TEXTURE_INTERNAL_FORMAT defined but no symbol loaded.");
