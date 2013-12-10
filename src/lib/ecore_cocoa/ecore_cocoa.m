@@ -74,7 +74,6 @@ ecore_cocoa_feed_events(void)
 
    unsigned int time = (unsigned int)((unsigned long long)(ecore_time_get() * 1000.0) & 0xffffffff);
 
-   printf("event cocoa feed\n");
    switch([event type])
    {
       case NSMouseMoved:
@@ -88,9 +87,6 @@ ecore_cocoa_feed_events(void)
          EcoreCocoaWindow *window = (EcoreCocoaWindow *)[event window];
          NSView *view = [window contentView];
          NSPoint pt = [event locationInWindow];
-
-         printf("Mouse Move %f %f\n",
-                pt.x, [view frame].size.height - pt.y);
 
          ev->x = pt.x;
          ev->y = [view frame].size.height - pt.y;
@@ -116,9 +112,6 @@ ecore_cocoa_feed_events(void)
          EcoreCocoaWindow *window = (EcoreCocoaWindow *)[event window];
          NSView *view = [window contentView];
          NSPoint pt = [event locationInWindow];
-
-         printf("Mouse Down %f %f\n",
-                pt.x, [view frame].size.height - pt.y);
 
          ev->x = pt.x;
          ev->y = [view frame].size.height - pt.y;
@@ -155,9 +148,6 @@ ecore_cocoa_feed_events(void)
          NSView *view = [window contentView];
          NSPoint pt = [event locationInWindow];
 
-         printf("Mouse UP %f %f\n",
-                pt.x, [view frame].size.height - pt.y);
-         
          ev->x = pt.x;
          ev->y = [view frame].size.height - pt.y;
          ev->root.x = ev->x;
@@ -186,8 +176,6 @@ ecore_cocoa_feed_events(void)
       {
          Ecore_Event_Key *ev;
          unsigned int     i;
-         
-         printf("Key Down\n");
 
          ev = calloc(1, sizeof (Ecore_Event_Key));
          if (!ev) return;
@@ -197,6 +185,7 @@ ecore_cocoa_feed_events(void)
          {
             if (keystable[i].code == tolower([[event charactersIgnoringModifiers] characterAtIndex:0]))
             {
+	      printf("Key pressed : %s\n", keystable[i].name);
                ev->keyname = keystable[i].name;
                ev->string = keystable[i].compose;
 
