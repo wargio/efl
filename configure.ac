@@ -927,7 +927,6 @@ EFL_ADD_FEATURE([EINA], [systemd-journal], [${want_systemd}])
 EFL_LIB_END([Eina])
 #### End of Eina
 
-
 #### Eina CXX
 EFL_LIB_START([Eina_Cxx])
 
@@ -942,6 +941,46 @@ AM_CONDITIONAL([HAVE_CXX11], [test "x${have_cxx11}" -a "xyes"])
 
 EFL_LIB_END([Eina_Cxx])
 #### End of Eina CXX
+
+#### Eo
+
+EFL_LIB_START([Eo])
+
+### Default values
+
+### Additional options to configure
+
+### Checks for programs
+
+## Compatibility layers
+EFL_PLATFORM_DEPEND([EO], [evil])
+
+### Checks for libraries
+EFL_INTERNAL_DEPEND_PKG([EO], [eina])
+
+# Example (evas one)
+
+# TODO: add once elementary is merged
+#PKG_CHECK_MODULES([ELM], [elementary >= 1.7.0], [have_elm="yes"], [have_elm="no"])
+AM_CONDITIONAL([EO_BUILD_EXAMPLE_EVAS], [test "x${have_elm}" = "xyes"])
+
+### Checks for header files
+
+### Checks for types
+
+### Checks for structures
+
+### Checks for compiler characteristics
+
+### Checks for linker characteristics
+
+### Checks for library functions
+
+### Check availability
+
+EFL_LIB_END([Eo])
+#### End of Eo
+
 
 #### Eet
 
@@ -989,46 +1028,6 @@ EFL_EVAL_PKGS([EET])
 
 EFL_LIB_END([Eet])
 #### End of Eet
-
-
-#### Eo
-
-EFL_LIB_START([Eo])
-
-### Default values
-
-### Additional options to configure
-
-### Checks for programs
-
-## Compatibility layers
-EFL_PLATFORM_DEPEND([EO], [evil])
-
-### Checks for libraries
-EFL_INTERNAL_DEPEND_PKG([EO], [eina])
-
-# Example (evas one)
-
-# TODO: add once elementary is merged
-#PKG_CHECK_MODULES([ELM], [elementary >= 1.7.0], [have_elm="yes"], [have_elm="no"])
-AM_CONDITIONAL([EO_BUILD_EXAMPLE_EVAS], [test "x${have_elm}" = "xyes"])
-
-### Checks for header files
-
-### Checks for types
-
-### Checks for structures
-
-### Checks for compiler characteristics
-
-### Checks for linker characteristics
-
-### Checks for library functions
-
-### Check availability
-
-EFL_LIB_END([Eo])
-#### End of Eo
 
 #### Eolian
 
