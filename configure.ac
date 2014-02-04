@@ -1927,13 +1927,27 @@ AC_CHECK_HEADERS([ \
 arpa/inet.h \
 langinfo.h \
 features.h \
-net/if.h \
 netinet/in.h \
 netinet/tcp.h \
 sys/prctl.h \
 sys/resource.h \
 sys/timerfd.h \
 sys/un.h \
+])
+
+AC_CHECK_HEADERS([net/if.h], [], [],
+[#include <stdio.h>
+#if STDC_HEADERS
+# include <stdlib.h>
+# include <stddef.h>
+#else
+# if HAVE_STDLIB_H
+#  include <stdlib.h>
+# endif
+#endif
+#if HAVE_SYS_SOCKET_H
+# include <sys/socket.h>
+#endif
 ])
 
 ### Checks for types
