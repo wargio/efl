@@ -1124,7 +1124,7 @@ AC_ARG_ENABLE([drm],
    ],
    [want_drm="no"])
 
-AC_ARG_ENABLE([drm],
+AC_ARG_ENABLE([drm_hw_accel],
    [AC_HELP_STRING([--enable-drm-hw-accel],
        [enable drm hardware acceleration. @<:@default=disabled@:>@])],
    [
@@ -1434,6 +1434,7 @@ EVAS_CHECK_ENGINE([software-ddraw], [${want_evas_engine_software_ddraw}], [no], 
 EVAS_CHECK_ENGINE([wayland-egl], [${want_evas_engine_wayland_egl}], [no], [Wayland Egl])
 EVAS_CHECK_ENGINE([wayland-shm], [${want_wayland}], [no], [Wayland Shm])
 EVAS_CHECK_ENGINE([drm], [${want_drm}], [no], [Drm])
+
 
 # Software XCB
 
