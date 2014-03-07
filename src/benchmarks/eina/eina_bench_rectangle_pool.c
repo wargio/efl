@@ -23,18 +23,24 @@
 #include "eina_bench.h"
 #include "Eina.h"
 
+#define W 1024
+#define H 512
+#define RW 64
+#define RH 64
+
 static void
-eina_bench_eina_rectangle_pool(int request)
+eina_bench_generic_packing_efficiency(int request, Eina_Rectangle_Packing type)
 {
    Eina_Rectangle_Pool *pool;
    Eina_Rectangle *rect;
-   Eina_List *list = NULL;
+   Eina_List *list = NULL, *list1 = NULL;
+   int current_descending=0;
+   int count = 0;
    int i;
 
-   eina_init();
-   eina_init();
+   pool = eina_rectangle_pool_new(W, H);
+   eina_rectangle_pool_packing_set(pool, type);
 
-   pool = eina_rectangle_pool_new(2048, 2048);
    if (!pool)
       return;
 
@@ -44,33 +50,54 @@ eina_bench_eina_rectangle_pool(int request)
 
         while (!rect)
           {
-             rect = eina_rectangle_pool_request(pool, i & 0xFF, 256 - (i & 0xFF));
+             rect = eina_rectangle_pool_request(pool, rand() % RW + 1, rand() % RH + 1);
              if (!rect)
                {
-                  rect = eina_list_data_get(list);
-                  list = eina_list_remove_list(list, list);
+                  list1 = eina_list_last(list);
+                  rect = eina_list_data_get(list1);
+                  list = eina_list_remove_list(list, list1);
                   if (rect)
-                     eina_rectangle_pool_release(rect);
+                    {
+                       count = 1;
+                       eina_rectangle_pool_release(rect);
+                    }
                }
-             else
-                list = eina_list_append(list, rect);
-
-             if (!(i & 0xFF))
-                break;
+            else
+              {
+                 if (!count)
+                   current_descending++;
+                 list = eina_list_append(list, rect);
+              }
           }
      }
 
    eina_rectangle_pool_free(pool);
    eina_list_free(list);
-
-   eina_shutdown();
 }
+
+#define EINA_BENCH_PACKING(Name)                                        \
+  static void                                                           \
+  eina_bench_packing_#Name(int request)                                 \
+  {                                                                     \
+     eina_bench_generic_packing_efficiency(request, Eina_Packing_#Name); \
+  }
+
+EINA_BENCH_PACKING(Descending);
+EINA_BENCH_PACKING(Ascending);
+EINA_BENCH_PACKING(Bottom_Left);
+EINA_BENCH_PACKING(Bottom_Left_Skyline);
 
 void eina_bench_rectangle_pool(Eina_Benchmark *bench)
 {
-   eina_benchmark_register(bench, "eina",
-                           EINA_BENCHMARK(
-                              eina_bench_eina_rectangle_pool), 10, 4000, 100);
+#define EINA_BENCH_REGISTER(Name)                                       \
+   eina_benchmark_register(bench, "eina - "##Name,                      \
+                           EINA_BENCHMARK(eina_bench_packing_#Name),    \
+                           10, 4000, 100);
+
+   EINA_BENCH_REGISTER(Descending);
+   EINA_BENCH_REGISTER(Ascending);
+   EINA_BENCH_REGISTER(Bottom_Left);
+   EINA_BENCH_REGISTER(Bottom_Left_Skyline);
 }
 
 

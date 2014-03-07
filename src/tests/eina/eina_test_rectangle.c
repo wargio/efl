@@ -25,7 +25,8 @@
 #include "eina_suite.h"
 #include "Eina.h"
 
-START_TEST(eina_rectangle_pool)
+static void
+eina_test_generic_rectangle_pool(Eina_Rectangle_Packing type)
 {
    Eina_Rectangle_Pool *pool;
    Eina_Rectangle *rects[8][8];
@@ -38,6 +39,8 @@ START_TEST(eina_rectangle_pool)
 
    pool = eina_rectangle_pool_new(256, 256);
    fail_if(pool == NULL);
+
+   eina_rectangle_pool_packing_set(pool, type);
 
    eina_rectangle_pool_data_set(pool, rects);
    fail_if(eina_rectangle_pool_data_get(pool) != rects);
@@ -69,6 +72,29 @@ START_TEST(eina_rectangle_pool)
    eina_rectangle_pool_free(pool);
 
    eina_shutdown();
+}
+
+START_TEST(eina_rectangle_pool_descending)
+{
+   eina_test_generic_rectangle_pool(Eina_Packing_Descending);
+}
+END_TEST
+
+START_TEST(eina_rectangle_pool_ascending)
+{
+   eina_test_generic_rectangle_pool(Eina_Packing_Ascending);
+}
+END_TEST
+
+START_TEST(eina_rectangle_pool_bottom_left)
+{
+   eina_test_generic_rectangle_pool(Eina_Packing_Bottom_Left);
+}
+END_TEST
+
+START_TEST(eina_rectangle_pool_bottom_left_skyline)
+{
+   eina_test_generic_rectangle_pool(Eina_Packing_Bottom_Left_Skyline);
 }
 END_TEST
 
@@ -109,7 +135,10 @@ END_TEST
 void
 eina_test_rectangle(TCase *tc)
 {
-   tcase_add_test(tc, eina_rectangle_pool);
+   tcase_add_test(tc, eina_rectangle_pool_descending);
+   tcase_add_test(tc, eina_rectangle_pool_ascending);
+   tcase_add_test(tc, eina_rectangle_pool_bottom_left);
+   tcase_add_test(tc, eina_rectangle_pool_bottom_left_skyline);
    tcase_add_test(tc, eina_rectangle_intersect);
 }
 

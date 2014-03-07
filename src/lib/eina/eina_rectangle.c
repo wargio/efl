@@ -61,8 +61,12 @@ struct _Eina_Rectangle_Pool
    Eina_List *empty;
    void *data;
 
+   Eina_Compare_Cb eina_rectangle_compare_func;
+
    Eina_Trash *bucket;
    unsigned int bucket_count;
+
+   Eina_Rectangle_Packing type;
 
    unsigned int references;
    int w;
@@ -109,18 +113,40 @@ static int _eina_rectangle_log_dom = -1;
 #define DBG(...) EINA_LOG_DOM_DBG(_eina_rectangle_log_dom, __VA_ARGS__)
 
 static int
-_eina_rectangle_cmp(const Eina_Rectangle *r1, const Eina_Rectangle *r2)
+_eina_rectangle_cmp(const void *data1, const void *data2)
 {
+   Eina_Rectangle *r1 = (Eina_Rectangle *) data1;
+   Eina_Rectangle *r2 = (Eina_Rectangle *) data2;
    return (r2->w * r2->h) - (r1->w * r1->h);
 }
 
-static Eina_List *
-_eina_rectangle_merge_list(Eina_List *empty, Eina_Rectangle *r)
+static int
+_eina_rectangle_cmp_asc(const void *data1, const void *data2)
 {
-   Eina_Rectangle *match;
+   Eina_Rectangle *r1 = (Eina_Rectangle *) data1;
+   Eina_Rectangle *r2 = (Eina_Rectangle *) data2;
+   return (r1->w * r1->h) - (r2->w * r2->h);
+}
+
+static int
+_eina_rectangle_cmp_bl(const void *data1, const void *data2)
+{
+   Eina_Rectangle *r1 = (Eina_Rectangle *) data1;
+   Eina_Rectangle *r2 = (Eina_Rectangle *) data2;
+   if (r1->y != r2->y)
+     return (r1->y) - (r2->y);
+   else
+     return (r1->x) - (r2->x);
+}
+
+static Eina_List *
+_eina_rectangle_merge_list(Eina_List *empty, Eina_Rectangle_Packing type, Eina_Rectangle *r)
+{
+   Eina_Rectangle *match, *r1;
    Eina_List *l;
    int xw;
    int yh;
+   int x2 ,y2 ,w2 ,h2;
 
    if (r->w == 0 || r->h == 0)
      {
@@ -166,13 +192,41 @@ start_again:
 
            goto start_again;
         }
+      else if (match->y > r->y && type == Eina_Packing_Bottom_Left_Skyline
+               && (match->y + match->h == r->y + r->h) &&
+              (match->x + match->w == r->x || r->x + r->w == match->x))
+        {
+
+           if (r->x < match->x)
+              match->x = r->x;
+
+           match->w += r->w;
+
+           x2 = r->x;
+           y2 = r->y;
+           w2 = r->w;
+           h2 = match->y - r->y;
+
+           eina_rectangle_free(r);
+
+           r1 = eina_rectangle_new(x2, y2, w2, h2);
+
+           empty = eina_list_remove_list(empty, l);
+
+           if (r1)
+              empty = eina_list_append(empty, r1);
+
+           r = match;
+
+           goto start_again;
+        }
    }
 
    return eina_list_append(empty, r);
 }
 
 static Eina_List *
-_eina_rectangle_empty_space_find(Eina_List *empty, int w, int h, int *x, int *y)
+_eina_rectangle_empty_space_find(Eina_List *empty, Eina_Rectangle_Packing type, int w, int h, int *x, int *y)
 {
    Eina_Rectangle *r;
    Eina_List *l;
@@ -211,7 +265,7 @@ _eina_rectangle_empty_space_find(Eina_List *empty, int w, int h, int *x, int *y)
                 /* w2 could be w or r->w */
                 h2 = r->h - h;
 
-                if (rw1 * r->h > h2 * r->w)
+                if ((rw1 * r->h > h2 * r->w) || type == Eina_Packing_Bottom_Left || type == Eina_Packing_Bottom_Left_Skyline)
                   {
                      rh1 = r->h;
                      w2 = w;
@@ -223,14 +277,14 @@ _eina_rectangle_empty_space_find(Eina_List *empty, int w, int h, int *x, int *y)
                   }
 
                 EINA_RECTANGLE_SET(r, rx1, ry1, rw1, rh1);
-                empty = _eina_rectangle_merge_list(empty, r);
+                empty = _eina_rectangle_merge_list(empty, type, r);
 
                 r = eina_rectangle_new(x2, y2, w2, h2);
              }
 
            if (r)
              {
-                empty = _eina_rectangle_merge_list(empty, r); /* Return empty */
+                empty = _eina_rectangle_merge_list(empty, type, r); /* Return empty */
 
              }
 
@@ -376,6 +430,8 @@ eina_rectangle_pool_new(int w, int h)
    new->h = h;
    new->bucket = NULL;
    new->bucket_count = 0;
+   new->eina_rectangle_compare_func = _eina_rectangle_cmp;
+   new->type = Eina_Packing_Descending;
 
    EINA_MAGIC_SET(new, EINA_RECTANGLE_POOL_MAGIC);
    DBG("pool=%p, size=(%d, %d)", new, w, h);
@@ -440,11 +496,11 @@ eina_rectangle_pool_request(Eina_Rectangle_Pool *pool, int w, int h)
    if (!pool->sorted)
      {
         pool->empty =
-           eina_list_sort(pool->empty, 0, EINA_COMPARE_CB(_eina_rectangle_cmp));
+           eina_list_sort(pool->empty, 0, pool->eina_rectangle_compare_func);
         pool->sorted = EINA_TRUE;
      }
 
-   pool->empty = _eina_rectangle_empty_space_find(pool->empty, w, h, &x, &y);
+   pool->empty = _eina_rectangle_empty_space_find(pool->empty, pool->type, w, h, &x, &y);
    if (x == -1)
       return NULL;
 
@@ -498,7 +554,7 @@ eina_rectangle_pool_release(Eina_Rectangle *rect)
    r = eina_rectangle_new(rect->x, rect->y, rect->w, rect->h);
    if (r)
      {
-        era->pool->empty = _eina_rectangle_merge_list(era->pool->empty, r);
+        era->pool->empty = _eina_rectangle_merge_list(era->pool->empty, era->pool->type, r);
         era->pool->sorted = EINA_FALSE;
      }
 
@@ -529,6 +585,29 @@ eina_rectangle_pool_get(Eina_Rectangle *rect)
    EINA_MAGIC_CHECK_RECTANGLE_POOL(era->pool);
 
    return era->pool;
+}
+
+EAPI void
+eina_rectangle_pool_packing_set(Eina_Rectangle_Pool *pool, Eina_Rectangle_Packing type)
+{
+   EINA_MAGIC_CHECK_RECTANGLE_POOL(pool);
+   EINA_SAFETY_ON_NULL_RETURN(pool);
+
+   DBG("type=%d  pool=%p, size=(%d, %d), references=%u",
+       type, pool, pool->w, pool->h, pool->references);
+   pool->type =type;
+
+   switch (type)
+     {
+      case Eina_Packing_Ascending:
+         pool->eina_rectangle_compare_func = _eina_rectangle_cmp_asc;
+         break;
+      case Eina_Packing_Descending:
+         pool->eina_rectangle_compare_func = _eina_rectangle_cmp;
+         break;
+      default:
+         pool->eina_rectangle_compare_func = _eina_rectangle_cmp_bl;
+     }
 }
 
 EAPI void
