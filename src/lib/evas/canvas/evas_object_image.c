@@ -3111,7 +3111,10 @@ state_write:
 
                   // Filter stuff
                   if (o->filled)
-                    iw -= l + r;
+                    {
+                       iw -= l + r;
+                       if (iw <= 0) break;
+                    }
 
                   while ((int)idy < obj->cur->geometry.h)
                     {
@@ -3129,7 +3132,10 @@ state_write:
 
                        // Filter stuff
                        if (o->filled)
-                         ih -= t + b;
+                         {
+                            ih -= t + b;
+                            if (ih <= 0) break;
+                         }
 
                        if ((o->cur->border.l == 0) &&
                            (o->cur->border.r == 0) &&
