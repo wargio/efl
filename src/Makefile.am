@@ -70,6 +70,8 @@ include Makefile_Ethumb_Client.am
 
 include Makefile_Eina_Cxx.am
 
+include Makefile_Elua.am
+
 .PHONY: benchmark examples
 
 BENCHMARK_SUBDIRS = \
@@ -97,7 +99,8 @@ examples/eldbus \
 examples/ephysics \
 examples/edje \
 examples/emotion \
-examples/ethumb_client
+examples/ethumb_client \
+examples/elua
 if ALWAYS_BUILD_EXAMPLES
 SUBDIRS += . $(EXAMPLES_SUBDIRS)
 endif
