@@ -5741,6 +5741,10 @@ enum
    EVAS_OBJ_IMAGE_SUB_ID_SOURCE_EVENTS_GET,
    EVAS_OBJ_IMAGE_SUB_ID_SOURCE_CLIP_SET,
    EVAS_OBJ_IMAGE_SUB_ID_SOURCE_CLIP_GET,
+#ifdef EVAS_3D
+   EVAS_OBJ_IMAGE_SUB_ID_3D_SCENE_SET,
+   EVAS_OBJ_IMAGE_SUB_ID_3D_SCENE_GET,
+#endif
    EVAS_OBJ_IMAGE_SUB_ID_LAST
 };
 
@@ -5896,6 +5900,33 @@ enum
  * @see evas_object_image_source_clip_get
  */
 #define evas_obj_image_source_clip_get(source_clip) EVAS_OBJ_IMAGE_ID(EVAS_OBJ_IMAGE_SUB_ID_SOURCE_CLIP_GET), EO_TYPECHECK(Eina_Bool *, source_clip)
+
+#ifdef EVAS_3D
+/**
+ * @def evas_obj_image_3d_scene_set
+ * @since 1.8
+ *
+ * Set the 3D scene on an image object.
+ *
+ * @param[in] scene in
+ *
+ * @see evas_object_image_3d_scene_set
+ */
+#define evas_obj_image_3d_scene_set(scene) EVAS_OBJ_IMAGE_ID(EVAS_OBJ_IMAGE_SUB_ID_3D_SCENE_SET), EO_TYPECHECK(Evas_3D_Scene *, scene)
+
+/**
+ * @def evas_obj_image_3d_scene_get
+ * @since 1.8
+ *
+ * Get the 3D scene on an image object.
+ *
+ * @param[in] scene in
+ * @param[out] result out
+ *
+ * @see evas_object_image_3d_scene_get
+ */
+#define evas_obj_image_3d_scene_get(scene) EVAS_OBJ_IMAGE_ID(EVAS_OBJ_IMAGE_SUB_ID_3D_SCENE_GET), EO_TYPECHECK(Evas_3D_Scene **, scene)
+#endif
 
 /**
  * @def evas_obj_image_border_set
