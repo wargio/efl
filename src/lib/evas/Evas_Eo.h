@@ -205,3 +205,7 @@ EAPI extern const Eo_Event_Description _EVAS_CANVAS_EVENT_RENDER_POST;
 #include "canvas/evas_common_interface.eo.h"
 
 #include "canvas/evas_object.eo.h"
+
+#include"canvas/evas_image.eo.h"
+
+#include "canvas/evas_out.eo.h"

@@ -228,7 +228,7 @@ static const Evas_Object_Image_State default_state = {
   { 0, 0, 0 }, // image
   { 1.0, 0, 0, 0, 0, 1 }, // border
 
-  NULL, NULL, { NULL }, NULL,
+  NULL, NULL, NULL, { NULL }, NULL,
   0,
   EVAS_TEXTURE_REPEAT,
   EVAS_COLORSPACE_ARGB8888,
