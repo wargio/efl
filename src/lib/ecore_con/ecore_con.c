@@ -2396,7 +2396,7 @@ _ecore_con_server_flush(Ecore_Con_Server *svr)
         if (svr->fd_handler)
           ecore_main_fd_handler_active_set(svr->fd_handler, ECORE_FD_READ);
      }
-   else if ((count < num) && svr->fd_handler)
+   else if (((unsigned int)count < num) && svr->fd_handler)
      ecore_main_fd_handler_active_set(svr->fd_handler, ECORE_FD_WRITE);
 }
 
@@ -2467,7 +2467,7 @@ _ecore_con_client_flush(Ecore_Con_Client *cl)
         if (cl->fd_handler)
           ecore_main_fd_handler_active_set(cl->fd_handler, ECORE_FD_READ);
      }
-   else if (cl->fd_handler && (num >= 0))
+   else if (cl->fd_handler)
      ecore_main_fd_handler_active_set(cl->fd_handler, ECORE_FD_WRITE);
 }
 
