@@ -5172,6 +5172,37 @@ EAPI double                        evas_object_image_animated_frame_duration_get
  * @since 1.1
  */
 EAPI void                          evas_object_image_animated_frame_set(Evas_Object *obj, int frame_num);
+
+/**
+ * Set the scene on an image object.
+ *
+ * @param obj     Image object.
+ * @param scene   Scene object used as a content of the given image object.
+ *
+ * An image object can get its content from various sources like memory buffers,
+ * image files and other evas objects. A scene also can be a source for an image
+ * object to display the rendered result onto evas canvas.
+ *
+ * Any existing content (data, file or proxy source) will be removed after this
+ * call. Setting @p scene to @c NULL detach the 3D scene from the image object.
+ *
+ * @see evas_object_image_3d_scene_get()
+ * @since 1.10
+ */
+EAPI void               evas_object_image_3d_scene_set(Evas_Object *obj, Evas_3D_Scene *scene) EINA_ARG_NONNULL(1);
+
+/**
+ * Get the current scene of an image object.
+ *
+ * @param obj Image object.
+ * @return Scene object handle (if any), or @c NULL if there's no scene
+ *         attached.
+ *
+ * @see evas_object_image_3d_scene_set()
+ * @since 1.10
+ */
+EAPI Evas_3D_Scene     *evas_object_image_3d_scene_get(const Evas_Object *obj) EINA_WARN_UNUSED_RESULT EINA_ARG_NONNULL(1);
+
 /**
  * @}
  */
