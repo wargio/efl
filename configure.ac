@@ -322,7 +322,8 @@ if test "${want_coverage}" = "yes" ; then
       if test "x${prefer_assert}" = "xno"; then
          EFL_COV_CFLAGS="${EFL_COV_CFLAGS} -DNDEBUG"
       else
-         EFL_COV_CFLAGS="${EFL_COV_CFLAGS} -g -O0 -DDEBUG"
+         # Add -DDEBUG again once eolian is fixed
+         EFL_COV_CFLAGS="${EFL_COV_CFLAGS} -g -O0"
       fi
    else
       AC_MSG_ERROR([lcov is not found])
@@ -4184,6 +4185,8 @@ cmakeconfig/EezeConfig.cmake
 cmakeconfig/EezeConfigVersion.cmake:cmakeconfig/EFLConfigVersion.cmake.in
 cmakeconfig/EoConfig.cmake
 cmakeconfig/EoConfigVersion.cmake:cmakeconfig/EFLConfigVersion.cmake.in
+cmakeconfig/EolianConfig.cmake
+cmakeconfig/EolianConfigVersion.cmake:cmakeconfig/EFLConfigVersion.cmake.in
 cmakeconfig/EetConfig.cmake
 cmakeconfig/EetConfigVersion.cmake:cmakeconfig/EFLConfigVersion.cmake.in
 cmakeconfig/EvasConfig.cmake
